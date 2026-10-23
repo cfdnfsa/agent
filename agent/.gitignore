@@ -1,0 +1,5 @@
+.venv/
+.venv-backup/
+.idea/
+__pycache__/
+*.pyc
