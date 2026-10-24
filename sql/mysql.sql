@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS model_config
     model_code     VARCHAR(255)  NOT NULL COMMENT '调用服务时使用的模型标识',
     model_provider VARCHAR(32)   NOT NULL COMMENT '接入方式：openai=OpenAI兼容，ollama=Ollama，anthropic=Anthropic，google_genai=Gemini',
     model_base_url VARCHAR(1024) NOT NULL COMMENT '模型服务Base URL',
-    model_api_key  TEXT          NULL COMMENT 'API Key密文；无需密钥时为空；加解密由应用负责',
+    model_api_key  TEXT          NULL COMMENT 'API Key；当前明文保存；无需密钥时为空；查询接口不返回',
     created_at     DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
     updated_at     DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '更新时间；修改记录时由应用更新',
     PRIMARY KEY (id)

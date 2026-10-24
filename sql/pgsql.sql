@@ -21,6 +21,6 @@ COMMENT ON COLUMN model_config.model_name IS '模型显示名称';
 COMMENT ON COLUMN model_config.model_code IS '调用服务时使用的模型标识';
 COMMENT ON COLUMN model_config.model_provider IS '接入方式：openai=OpenAI兼容，ollama=Ollama，anthropic=Anthropic，google_genai=Gemini';
 COMMENT ON COLUMN model_config.model_base_url IS '模型服务Base URL';
-COMMENT ON COLUMN model_config.model_api_key IS 'API Key密文；无需密钥时为空；加解密由应用负责';
+COMMENT ON COLUMN model_config.model_api_key IS 'API Key；当前明文保存；无需密钥时为空；查询接口不返回';
 COMMENT ON COLUMN model_config.created_at IS '创建时间';
 COMMENT ON COLUMN model_config.updated_at IS '更新时间；修改记录时由应用更新';
