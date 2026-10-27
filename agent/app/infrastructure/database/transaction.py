@@ -31,10 +31,9 @@ def transactional[**Parameters, ReturnType](
         with db_session.begin():
             result = business_method(*args, **kwargs)
         # 只有退出 begin 且提交成功后才记录此日志；提交失败会交给公共异常处理。
-        logger.info(
-            "请求ID=%s 操作=数据库事务提交 方法=%s",
-            request_id_context.get(), business_method.__qualname__,
-        )
+
+        logger.info("请求ID=%s 操作=数据库事务提交 方法=%s", request_id_context.get(), business_method.__qualname__)
+
         return result
 
     return run_in_transaction

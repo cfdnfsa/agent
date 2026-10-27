@@ -1,4 +1,4 @@
-/** 解析后端统一返回，供模型管理和调试台共用。 */
+/** 解析后端统一返回，供模型管理、流程管理和调试台共用。 */
 interface ApiResult<T> {
   code: number
   message: string

@@ -21,6 +21,14 @@ uv run python -m uvicorn main:app --reload
 
 数据库连接、ORM 公共能力放在 `app/infrastructure/database`，模型业务放在 `app/modules/model_config`。增删改查使用 SQLAlchemy ORM；Service 写操作通过数据库公共包的 `@transactional` 统一提交或回滚，模型调用保留查询阶段的局部事务。按当前要求未添加测试脚本。
 
+## 流程配置
+
+`app/modules/workflow_config` 提供流程名称和定义文本的基础增删改查，接口前缀为 `/api/workflow-configs`。流程表只有 ID、名称、定义三个字段，没有时间字段；列表只读取 ID 和名称，详情返回完整定义。定义内容按字符串原样保存，当前不解析、校验或执行流程。
+
+先在目标数据库执行 `sql/pgsql.sql` 中新增的流程建表部分，也可以执行完整初始化脚本；已有表不会重复创建。MySQL 5.7+ 的对应定义保存在 `sql/mysql.sql`，流程大文本分别使用 PostgreSQL TEXT、MySQL LONGTEXT。详见 [流程配置包文档](app/modules/workflow_config/README.md) 和仓库 [SQL 说明](../sql/README.md)。
+
+公共 Base 只声明 id；模型配置和流程配置都不维护创建时间、更新时间。已有模型表需要执行 [删除时间字段的增量 SQL](../sql/remove_model_config_time_columns.sql)，新建数据库直接使用更新后的初始化脚本。
+
 ## 代码阅读入口
 
 | 文档 | 内容 |
@@ -29,6 +37,7 @@ uv run python -m uvicorn main:app --reload
 | [公共能力](app/core/README.md) | 配置、日志、公共异常和统一返回结构 |
 | [数据库公共能力](app/infrastructure/database/README.md) | 连接池、会话、ORM 公共字段和事务 |
 | [模型配置管理](app/modules/model_config/README.md) | 接口、数据结构、业务流程和数据库操作 |
+| [流程配置管理](app/modules/workflow_config/README.md) | 三字段流程表、文本定义、分页及基础增删改查 |
 | [模型调用公共能力](app/infrastructure/llm/README.md) | LangChain 模型集成、实体传参、基础地址和错误处理 |
 | [调试台](app/modules/playground/README.md) | 选择模型进行单轮问答，不保存聊天记录 |
 | [后端协作规则](AGENTS.md) | 后续中文注释和包文档维护约定 |

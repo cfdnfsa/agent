@@ -13,6 +13,7 @@ from app.core.app_logging import logger, request_id_context
 from app.infrastructure.database.db_connection import db_engine
 from app.modules.model_config.router import router as model_config_router
 from app.modules.playground.router import router as playground_router
+from app.modules.workflow_config.router import router as workflow_config_router
 
 
 # ---------- 管理应用生命周期
@@ -29,6 +30,7 @@ register_exception_handlers(app)
 # 路由文件只声明接口；include_router 把这组接口正式挂到当前应用上。
 app.include_router(model_config_router)
 app.include_router(playground_router)
+app.include_router(workflow_config_router)
 
 
 # ---------- 记录请求日志和耗时

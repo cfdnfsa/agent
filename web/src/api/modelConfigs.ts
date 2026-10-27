@@ -10,8 +10,6 @@ export interface ModelConfig {
   model_provider: ModelProvider
   model_base_url: string
   has_api_key: boolean
-  created_at: string
-  updated_at: string
 }
 
 export interface ModelConfigRequest {

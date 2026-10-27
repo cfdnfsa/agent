@@ -1,6 +1,6 @@
-# 模型配置接口
+# 前端接口
 
-公共 `request.ts` 负责 fetch 和统一响应解析，`modelConfigs.ts` 与 `playground.ts` 共同复用，避免重复处理网络错误。
+公共 `request.ts` 负责 fetch 和统一响应解析，`modelConfigs.ts`、`workflowConfigs.ts` 与 `playground.ts` 共同复用，避免重复处理网络错误。
 
 `playground.ts` 的 `askModel(modelConfigId, question)` 调用 `POST /api/playground/chat`，只提交 `{model_config_id, question}` 并返回回答字符串，不接收或发送历史消息。
 
@@ -13,9 +13,22 @@
 | `deleteModelConfig(modelId)` | DELETE 删除指定记录 |
 | `testModelConfig(modelId)` | POST `/api/model-configs/{id}/test`，无请求体；成功返回 elapsed_ms |
 
+## 流程配置接口
+
+workflowConfigs.ts 使用 /api/workflow-configs，复用相同的 request 函数：
+
+| 方法 | 用途 |
+|---|---|
+| listWorkflowConfigs(page, pageSize) | GET 分页概要，只含 id、workflow_name |
+| getWorkflowConfig(workflowId) | GET 详情，包含完整定义字符串 |
+| saveWorkflowConfig(workflowId, workflowConfig) | ID 为 null 时 POST 新增，否则 PUT 修改 |
+| deleteWorkflowConfig(workflowId) | DELETE 指定流程 |
+
+WorkflowConfigSummary 通过 Pick 表示列表实际返回的两个字段，WorkflowConfigRequest 通过 Omit 排除自增 ID；这些仅是 TypeScript 类型，不创建运行时 DTO 或转换数据。workflow_definition 始终为字符串，JSON.stringify 只处理 HTTP 请求体，定义字段本身不单独解析或再次序列化。
+
 统一解析后端的 `code、message、data`，网络或接口失败时抛出可展示的错误消息，由页面决定展示位置，不在接口模块保存页面状态。
 
-响应 `ModelConfig` 只有 `has_api_key`，没有密钥字段。提交时省略 `model_api_key` 表示保留原值，null 表示清除，非空字符串表示替换。不记录或持久化 API Key 到浏览器存储。
+响应 `ModelConfig` 通过 `has_api_key` 表示密钥状态，没有密钥字段，也没有 created_at、updated_at。提交时省略 `model_api_key` 表示保留原值，null 表示清除，非空字符串表示替换。不记录或持久化 API Key 到浏览器存储。
 
 TypeScript 接口只帮助编辑器提示，不做运行时字段校验。配置值和问题原样提交，接入方式类型为 string，不加枚举限制。后端接收 JSON 字典直接操作实体；空字符串也可以原样保存，JSON/ORM/数据库/SDK 的基础要求仍然有效。
 

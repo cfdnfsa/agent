@@ -1,12 +1,12 @@
 # 数据库公共能力
 
-本包提供 ORM 公共字段、连接池、请求会话和同步事务装饰器。具体模型表的查询与写入放在 `app/modules/model_config/repository.py`。
+本包提供 ORM 公共字段、连接池、请求会话和同步事务装饰器。具体表的查询与写入放在各业务模块的 repository.py，例如模型配置和流程配置。
 
 ## 文件与阅读顺序
 
 | 文件 | 作用 |
 |---|---|
-| `base.py` | ORM 基类，声明主键和两个时间字段 |
+| `base.py` | ORM 基类，只声明公共自增主键 id |
 | `db_connection.py` | 根据配置创建 Engine、会话工厂，提供 FastAPI 会话依赖和公共别名 DbSession |
 | `transaction.py` | 提供 @transactional，复用 Service 的 db_session 管理同步方法事务 |
 
@@ -58,9 +58,11 @@ def create(self, request_data: dict[str, Any]) -> ModelConfig:
 
 `pool_pre_ping=True` 在复用连接时检查连接是否有效；`hide_parameters=True` 隐藏 SQL 异常日志中的绑定参数。
 
-## 表结构与时间字段
+## 表结构与初始化
 
-业务实体继承 `Base` 后获得 `id`、`created_at`、`updated_at`。时间使用数据库时钟，`updated_at` 由 ORM 在实际更新时赋值，直接绕过 ORM 修改数据时需自行维护。
+业务实体继承 `Base` 后只获得公共 `id`，其余字段按各自表结构声明。流程配置只有 ID、名称、定义文本，不增加时间字段。
+
+模型配置也不再声明 created_at、updated_at，接口不返回时间字段。旧表删除这两列的增量脚本为仓库根目录 sql/remove_model_config_time_columns.sql，兼容 MySQL 5.7+ 和 PostgreSQL 14+；新库直接执行最终版初始化脚本。
 
 应用启动时不会自动建表。当前 PostgreSQL 初始化脚本在仓库根目录 `sql/pgsql.sql`；MySQL 初始化脚本保留在 `sql/mysql.sql`，当前后端尚未配置 MySQL 驱动。
 

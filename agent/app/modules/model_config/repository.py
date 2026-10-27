@@ -63,7 +63,7 @@ class ModelConfigRepository:
         self.db_session.add(model_config)
         # flush 把 INSERT/UPDATE 发给数据库，但还没有 commit，仍然可以回滚。
         self.db_session.flush()
-        # 回读数据库生成的主键、时间，确保接口响应使用实际保存的值。
+        # 回读 has_api_key 等查询计算值，确保接口响应中的密钥状态与保存值一致。
         self.db_session.refresh(model_config)
         return model_config
 

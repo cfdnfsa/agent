@@ -14,6 +14,7 @@ import { RouterLink, RouterView } from 'vue-router'
         <span class="header-divider"></span>
         <nav class="app-nav" aria-label="主导航">
           <RouterLink to="/model-configs">模型配置</RouterLink>
+          <RouterLink to="/workflow-configs">流程配置</RouterLink>
           <RouterLink to="/playground">调试台</RouterLink>
         </nav>
       </div>

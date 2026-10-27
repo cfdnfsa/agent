@@ -11,7 +11,7 @@ from app.infrastructure.database.base import Base
 class ModelConfig(Base):
     """模型配置表映射，字段与 sql 目录中的初始化脚本对应。"""
 
-    # ORM 据此找到实际数据表，继承 Base 后也会拥有 id 和两个时间字段。
+    # ORM 据此找到实际数据表，继承 Base 后拥有公共 id。
     __tablename__ = "model_config"
 
     # 显示名称与实际模型标识分开，允许同一模型配置不同地址和凭证。

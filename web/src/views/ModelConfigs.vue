@@ -69,11 +69,6 @@ function providerLabel(provider: ModelProvider): string {
   return providerOptions.find(option => option.value === provider)?.label ?? provider
 }
 
-function formatDate(dateValue: string): string {
-  // 后端时间没有时区偏移，按返回的数据库时间展示，不擅自进行时区换算。
-  return dateValue.replace('T', ' ').slice(0, 16)
-}
-
 /** 只回填公开字段，输入内容不做格式或长度校验。 */
 function openEditor(modelConfig: ModelConfig | null = null): void {
   editingModel.value = modelConfig
@@ -215,10 +210,6 @@ onMounted(() => loadModels())
       <!-- @vue-generic {ModelConfig} -->
       <el-table-column label="API Key" width="110">
         <template #default="{ row }"><el-tag :type="row.has_api_key ? 'success' : 'info'" effect="plain">{{ row.has_api_key ? '已配置' : '未配置' }}</el-tag></template>
-      </el-table-column>
-      <!-- @vue-generic {ModelConfig} -->
-      <el-table-column label="更新时间" width="175">
-        <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
       </el-table-column>
       <!-- @vue-generic {ModelConfig} -->
       <el-table-column label="操作" width="200" fixed="right">
