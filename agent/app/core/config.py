@@ -1,4 +1,4 @@
-"""应用配置入口：把 .env 中的文本转换为有类型、有校验规则的配置对象。"""
+"""应用配置入口：读取 .env 和环境变量，保留基础类型解析。"""
 
 from functools import lru_cache
 from pathlib import Path
@@ -23,20 +23,22 @@ class Settings(BaseSettings):
     )
 
     # 字段自动对应 .env 中的同名大写变量，如 db_host 对应 DB_HOST。
-    db_host: str = Field(min_length=1, description="数据库主机")
-    # 未配置时使用 PostgreSQL 默认端口，并限制为合法的网络端口范围。
-    db_port: int = Field(default=5432, ge=1, le=65535, description="数据库端口")
-    db_name: str = Field(min_length=1, description="数据库名称")
-    db_user: str = Field(min_length=1, description="数据库用户名")
+    db_host: str = Field(description="数据库主机")
+    # 未配置时使用 PostgreSQL 默认端口，连接是否成功由数据库驱动处理。
+    db_port: int = Field(default=5432, description="数据库端口")
+    db_name: str = Field(description="数据库名称")
+    db_user: str = Field(description="数据库用户名")
     # SecretStr 只是在打印对象时隐藏内容，并不是加密；连接时才取出真实密码。
     db_password: SecretStr = Field(description="数据库密码，不输出到日志")
 
+    # ---------- 初始化应用配置
     def __init__(self) -> None:
         """配置从环境读取，调用方无需传参；保留 BaseSettings 的读取和必填校验。"""
         # 显式声明无参入口，避免类型检查器将必填配置字段误判为必传构造参数。
         super().__init__()
 
 
+# ---------- 读取并复用应用配置
 @lru_cache
 def get_settings() -> Settings:
     """复用配置对象，避免每次请求重复读取环境文件。"""

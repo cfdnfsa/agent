@@ -22,9 +22,9 @@ class Page(BaseModel, Generic[T]):
     """通用分页数据，作为 Result.data 使用，不额外包装成功或失败信息。"""
 
     items: list[T] = Field(description="本页记录")
-    total: int = Field(ge=0, description="总记录数")
-    page: int = Field(ge=1, description="当前页码，从 1 开始")
-    page_size: int = Field(ge=1, description="每页数量")
+    total: int = Field(description="总记录数")
+    page: int = Field(description="当前页码")
+    page_size: int = Field(description="每页数量")
 
 
 # 各 Router 共用错误文档，避免 /docs 仍显示 FastAPI 默认的 detail 格式。

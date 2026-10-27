@@ -10,7 +10,7 @@
 | `message` | 成功默认“成功”；失败为公开错误说明 |
 | `data` | 业务数据；没有数据时为 null |
 
-`T` 表示业务数据的类型，例如 `Result[ModelConfigResponse]` 表示 `data` 为模型详情。Router 包装 Result，Service 继续返回业务数据，避免层层重复包装。
+`T` 表示业务数据的类型。当前极简版本模型详情使用 `Result[dict[str, Any]]`，直接读取实体字段并排除 Key，没有独立的模型响应类。Router 包装 Result，Service 返回业务数据。
 
 删除成功返回 HTTP 200：
 
@@ -26,7 +26,7 @@
 
 ## Page
 
-`Page[T]` 只包含 `items、total、page、page_size`。模型分页接口类型为 `Result[Page[ModelConfigResponse]]`：分页字段位于 `data` 内，`items` 里的每条记录为不含 Key 的模型详情。
+`Page[T]` 只包含 `items、total、page、page_size`，不再附加数值范围约束。模型分页接口类型为 `Result[Page[dict[str, Any]]]`，每条记录是排除 Key 后的实体字段。
 
 ## 接口文档
 

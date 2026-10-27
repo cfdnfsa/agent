@@ -17,7 +17,11 @@ Service 只表达失败原因，不直接构造 HTTP 响应；`main.py` 调用 `
 
 注册给框架的处理器统一使用 `(Request, Exception) -> JSONResponse` 的异步签名。需要访问具体异常字段时，函数内部先通过 `isinstance` 确认类型，兼顾框架回调契约与静态类型检查，不使用忽略类型警告的注释。
 
+当前个人极简版已移除业务字段校验和 DTO。这里的 422 处理仍保留，用于 JSON 对象、路径整数等 FastAPI 基础解析错误；数据库约束或 SDK 调用失败直接沿用对应错误处理，不提前再写一套检查。
+
 处理器内部用 `error_result` 表示统一错误结果，`validation_errors` 表示字段校验错误列表，`error_message` 和 `error_details` 表示 HTTP 错误的公开说明与详细数据。
+
+`build_error_response(request, status_code, message, data, headers)` 是共用的普通函数，集中构造 JSON 和请求ID响应头；参数含义写在函数文档中。处理器本身保留框架要求的回调签名。
 
 ## 错误约定
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
-import ModelConfigs from './views/ModelConfigs.vue'
+import { RouterLink, RouterView } from 'vue-router'
 </script>
 
 <template>
@@ -8,13 +8,16 @@ import ModelConfigs from './views/ModelConfigs.vue'
   <el-config-provider :locale="zhCn">
     <header class="app-header">
       <div class="header-content">
-        <a class="brand" href="/" aria-label="AI Agent 首页">
+        <RouterLink class="brand" to="/model-configs" aria-label="AI Agent 首页">
           <span class="brand-icon">A</span> AI Agent
-        </a>
+        </RouterLink>
         <span class="header-divider"></span>
-        <span class="header-section">配置管理</span>
+        <nav class="app-nav" aria-label="主导航">
+          <RouterLink to="/model-configs">模型配置</RouterLink>
+          <RouterLink to="/playground">调试台</RouterLink>
+        </nav>
       </div>
     </header>
-    <main class="page"><ModelConfigs /></main>
+    <main class="page"><RouterView /></main>
   </el-config-provider>
 </template>

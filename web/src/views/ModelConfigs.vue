@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import type { FormInstance, FormRules } from 'element-plus'
+import { computed, onMounted, reactive, ref } from 'vue'
 import {
-  deleteModelConfig, listModelConfigs, saveModelConfig,
+  deleteModelConfig, listModelConfigs, saveModelConfig, testModelConfig,
   type ModelConfig, type ModelConfigRequest, type ModelProvider,
 } from '../api/modelConfigs'
 
@@ -28,43 +27,21 @@ const totalCount = ref(0)
 const isLoading = ref(false)
 const isSaving = ref(false)
 const isDeleting = ref(false)
-const isBusy = computed(() => isLoading.value || isSaving.value || isDeleting.value)
+const testingModelId = ref<number | null>(null)
+const isBusy = computed(() => isLoading.value || isSaving.value || isDeleting.value || testingModelId.value !== null)
 const loadError = ref('')
 const formError = ref('')
 const deleteError = ref('')
 const successMessage = ref('')
+const modelTestError = ref('')
 const isEditorVisible = ref(false)
 const isDeleteVisible = ref(false)
-const modelFormRef = ref<FormInstance>()
 const editingModel = ref<ModelConfig | null>(null)
 const deletingModel = ref<ModelConfig | null>(null)
 const modelForm = reactive<ModelConfigForm>({
   model_name: '', model_code: '', model_provider: 'openai',
   model_base_url: '', model_api_key: '', clear_api_key: false,
 })
-
-// 表单校验交给 Element Plus；提交后仍由后端再次校验。
-const formRules: FormRules<ModelConfigForm> = {
-  model_name: [{ required: true, whitespace: true, message: '请输入模型名称', trigger: 'blur' }],
-  model_code: [{ required: true, whitespace: true, message: '请输入实际模型标识', trigger: 'blur' }],
-  model_provider: [{ required: true, message: '请选择接入方式', trigger: 'change' }],
-  model_base_url: [{
-    required: true,
-    trigger: 'blur',
-    validator: (_rule, value: string, callback) => {
-      try {
-        const serviceUrl = new URL(value.trim())
-        if (serviceUrl.protocol !== 'http:' && serviceUrl.protocol !== 'https:') {
-          callback(new Error('服务地址必须以 http:// 或 https:// 开头'))
-          return
-        }
-        callback()
-      } catch {
-        callback(new Error('请输入有效的 HTTP 或 HTTPS 服务地址'))
-      }
-    },
-  }],
-}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '操作失败，请稍后重试。'
@@ -97,8 +74,8 @@ function formatDate(dateValue: string): string {
   return dateValue.replace('T', ' ').slice(0, 16)
 }
 
-/** 编辑时仅回填公开字段，每次打开都清空密钥与上一次校验提示。 */
-async function openEditor(modelConfig: ModelConfig | null = null): Promise<void> {
+/** 只回填公开字段，输入内容不做格式或长度校验。 */
+function openEditor(modelConfig: ModelConfig | null = null): void {
   editingModel.value = modelConfig
   formError.value = ''
   successMessage.value = ''
@@ -110,21 +87,17 @@ async function openEditor(modelConfig: ModelConfig | null = null): Promise<void>
     model_api_key: '', clear_api_key: false,
   })
   isEditorVisible.value = true
-  await nextTick()
-  modelFormRef.value?.clearValidate()
 }
 
 /** Key 留空时省略字段，勾选清除时提交 null；保存中禁止重复提交或关闭弹窗。 */
 async function submitModel(): Promise<void> {
-  if (!modelFormRef.value || isSaving.value) return
-  const isValid = await modelFormRef.value.validate().catch(() => false)
-  if (!isValid || isSaving.value) return
+  if (isSaving.value) return
 
   const modelRequest: ModelConfigRequest = {
-    model_name: modelForm.model_name.trim(),
-    model_code: modelForm.model_code.trim(),
+    model_name: modelForm.model_name,
+    model_code: modelForm.model_code,
     model_provider: modelForm.model_provider,
-    model_base_url: modelForm.model_base_url.trim(),
+    model_base_url: modelForm.model_base_url,
   }
   if (modelForm.clear_api_key) modelRequest.model_api_key = null
   else if (modelForm.model_api_key) modelRequest.model_api_key = modelForm.model_api_key
@@ -176,6 +149,22 @@ async function confirmDelete(): Promise<void> {
   }
 }
 
+/** 每次只测试一个模型；重复点击被拦截，成功或失败都只在当前页面提示。 */
+async function testConnection(modelConfig: ModelConfig): Promise<void> {
+  if (isBusy.value) return
+  testingModelId.value = modelConfig.id
+  successMessage.value = ''
+  modelTestError.value = ''
+  try {
+    const testResult = await testModelConfig(modelConfig.id)
+    successMessage.value = `「${modelConfig.model_name}」测试成功，耗时 ${testResult.elapsed_ms} ms。`
+  } catch (error) {
+    modelTestError.value = `「${modelConfig.model_name}」测试失败：${errorMessage(error)}`
+  } finally {
+    testingModelId.value = null
+  }
+}
+
 onMounted(() => loadModels())
 </script>
 
@@ -193,6 +182,10 @@ onMounted(() => loadModels())
     v-if="successMessage" class="page-alert" :title="successMessage" type="success"
     show-icon @close="successMessage = ''"
   />
+  <el-alert
+    v-if="modelTestError" class="page-alert" :title="modelTestError" type="error"
+    show-icon @close="modelTestError = ''"
+  />
   <el-alert v-if="loadError" class="page-alert" title="模型列表加载失败" type="error" :closable="false" show-icon>
     <p>{{ loadError }}</p>
     <el-button link type="primary" :disabled="isBusy" @click="loadModels()">重新加载</el-button>
@@ -202,7 +195,7 @@ onMounted(() => loadModels())
     <template #header>
       <div class="panel-header">
         <div class="panel-title"><h2>模型列表</h2><el-tag type="info" effect="plain">{{ totalCount }} 个</el-tag></div>
-        <el-button :loading="isLoading" :disabled="isSaving || isDeleting" @click="loadModels()">刷新列表</el-button>
+        <el-button :loading="isLoading" :disabled="isSaving || isDeleting || testingModelId !== null" @click="loadModels()">刷新列表</el-button>
       </div>
     </template>
 
@@ -228,8 +221,12 @@ onMounted(() => loadModels())
         <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
       </el-table-column>
       <!-- @vue-generic {ModelConfig} -->
-      <el-table-column label="操作" width="130" fixed="right">
+      <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
+          <el-button
+            link type="primary" :disabled="isBusy" :loading="testingModelId === row.id"
+            :aria-label="`测试 ${row.model_name}`" @click="testConnection(row)"
+          >测试</el-button>
           <el-button link type="primary" :disabled="isBusy" :aria-label="`编辑 ${row.model_name}`" @click="openEditor(row)">编辑</el-button>
           <el-button link type="danger" :disabled="isBusy" :aria-label="`删除 ${row.model_name}`" @click="openDelete(row)">删除</el-button>
         </template>
@@ -250,7 +247,7 @@ onMounted(() => loadModels())
       />
     </div>
   </el-card>
-  <p class="page-note">API Key 保存后不回显，编辑时留空可保留原密钥。</p>
+  <p class="page-note">API Key 保存后不回显。测试使用已保存的配置进行真实模型调用，可能消耗少量额度。</p>
 
   <el-dialog
     v-model="isEditorVisible" :title="editingModel ? '编辑模型' : '新增模型'"
@@ -259,25 +256,25 @@ onMounted(() => loadModels())
     @close="modelForm.model_api_key = ''"
   >
     <el-form
-      id="model-config-form" ref="modelFormRef" :model="modelForm" :rules="formRules" label-position="top"
-      :disabled="isSaving" @submit.prevent="submitModel"
+      id="model-config-form" :model="modelForm" label-position="top"
+      :disabled="isSaving" novalidate @submit.prevent="submitModel"
     >
       <div class="form-grid">
         <el-form-item label="模型名称" prop="model_name">
-          <el-input v-model="modelForm.model_name" maxlength="100" placeholder="例如：日常问答模型" />
+          <el-input v-model="modelForm.model_name" placeholder="例如：日常问答模型" />
         </el-form-item>
         <el-form-item label="模型标识" prop="model_code">
-          <el-input v-model="modelForm.model_code" maxlength="255" placeholder="服务端的实际模型标识" />
+          <el-input v-model="modelForm.model_code" placeholder="服务端的实际模型标识" />
         </el-form-item>
       </div>
       <el-form-item label="接入方式" prop="model_provider">
-        <el-select v-model="modelForm.model_provider" placeholder="请选择接入方式">
+        <el-select v-model="modelForm.model_provider" filterable allow-create placeholder="选择或填写接入方式">
           <el-option v-for="provider in providerOptions" :key="provider.value" :label="provider.label" :value="provider.value" />
         </el-select>
       </el-form-item>
       <el-form-item label="服务地址" prop="model_base_url">
-        <el-input v-model="modelForm.model_base_url" maxlength="1024" placeholder="https://api.example.com/v1" />
-        <span class="field-hint">填写模型服务的基础地址，支持 HTTP 和 HTTPS。</span>
+        <el-input v-model="modelForm.model_base_url" placeholder="https://api.example.com/v1" />
+        <span class="field-hint">填写模型服务基础地址，保存时不检查地址格式。</span>
       </el-form-item>
       <el-form-item label="API Key（选填）" prop="model_api_key">
         <el-input

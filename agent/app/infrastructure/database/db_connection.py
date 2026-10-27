@@ -33,8 +33,14 @@ db_engine = create_engine(database_url, pool_pre_ping=True, hide_parameters=True
 db_session_factory = sessionmaker(bind=db_engine, autoflush=False, expire_on_commit=False)
 
 
+# ---------- 提供当前请求的数据库会话
 def get_db_session() -> Iterator[Session]:
-    """每个请求独立使用会话；退出时释放连接并回滚尚未提交的事务。"""
+    """为当前请求提供独立的数据库会话。
+
+    Yields:
+        一个 Session 对象，由 Depends 注入给需要数据库的服务。
+        请求结束后关闭会话、归还连接，并回滚尚未提交的事务。
+    """
     with db_session_factory() as db_session:
         # Depends 把 yield 出去的会话交给接口；请求结束后回到这里退出 with。
         # 退出时关闭会话、归还连接；写入提交仍由 Service 的事务代码决定。
