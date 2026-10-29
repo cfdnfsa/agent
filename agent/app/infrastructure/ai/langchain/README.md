@@ -1,6 +1,6 @@
-# 模型创建公共能力
+# LangChain 模型创建
 
-使用 LangChain 的模型集成，model_client.py 只负责创建模型对象。模型测试和问答在各自 Service 中直接调用框架的 invoke。
+本包位于 infrastructure/ai/langchain，使用 LangChain 的模型集成，model_client.py 只负责创建模型对象。模型测试和问答在各自 Service 中直接调用框架的 invoke，流程模型节点也复用这个创建入口。
 
 ## 普通函数
 
@@ -25,7 +25,7 @@ invoke 由框架提供，text 取得回复中的文本。问题原样传入，�
 
 ## 依赖与地址
 
-使用 langchain-core、langchain-openai、langchain-anthropic、langchain-ollama、langchain-google-genai。当前不引入 Agent 循环、记忆或 LangGraph 流程执行。
+使用 langchain-core、langchain-openai、langchain-anthropic、langchain-ollama、langchain-google-genai。流程图的构建和执行集中在同级 [langgraph](../langgraph/README.md)，本包只处理模型创建；当前不增加 Agent 循环或记忆。
 
 URL 原样传给对应集成的 base_url，不自动补路径、删除后缀或解析版本；按 SDK 要求填写后，通过页面测试确认能否调用。请求路径、鉴权和响应解析由对应 SDK 负责。
 

@@ -16,6 +16,7 @@ class WorkflowConfig(Base):
 
     # 页面展示的流程名称；当前只保存原始值，不增加唯一性或长度校验。
     workflow_name: Mapped[str] = mapped_column(String(100), nullable=False)
+
     # 内容可以是 JSON 字符串，但数据库使用文本列；MySQL 使用 LONGTEXT，PostgreSQL 使用 TEXT。
     workflow_definition: Mapped[str] = mapped_column(
         Text().with_variant(LONGTEXT(), "mysql"), nullable=False

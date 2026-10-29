@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.app_logging import logger, request_id_context
 from app.core.errors.exceptions import BusinessError
-from app.infrastructure.llm.model_client import create_chat_model
+from app.infrastructure.ai.langchain.model_client import create_chat_model
 from app.modules.model_config.repository import ModelConfigRepository
 
 

@@ -23,11 +23,25 @@ uv run python -m uvicorn main:app --reload
 
 ## 流程配置
 
-`app/modules/workflow_config` 提供流程名称和定义文本的基础增删改查，接口前缀为 `/api/workflow-configs`。流程表只有 ID、名称、定义三个字段，没有时间字段；列表只读取 ID 和名称，详情返回完整定义。定义内容按字符串原样保存，当前不解析、校验或执行流程。
+`app/modules/workflow_config` 提供流程名称和定义文本的基础增删改查，接口前缀为 `/api/workflow-configs`。流程表只有 ID、名称、定义三个字段，没有时间字段；列表只读取 ID 和名称，详情返回完整定义。定义内容按字符串原样保存，保存时不解析或校验；通过运行接口才解析和执行流程。
 
 先在目标数据库执行 `sql/pgsql.sql` 中新增的流程建表部分，也可以执行完整初始化脚本；已有表不会重复创建。MySQL 5.7+ 的对应定义保存在 `sql/mysql.sql`，流程大文本分别使用 PostgreSQL TEXT、MySQL LONGTEXT。详见 [流程配置包文档](app/modules/workflow_config/README.md) 和仓库 [SQL 说明](../sql/README.md)。
 
 公共 Base 只声明 id；模型配置和流程配置都不维护创建时间、更新时间。已有模型表需要执行 [删除时间字段的增量 SQL](../sql/remove_model_config_time_columns.sql)，新建数据库直接使用更新后的初始化脚本。
+
+## 流程运行
+
+`app/modules/workflow_runtime` 独立负责执行，配置管理留在 workflow_config。接口为 `POST /api/workflow-configs/{id}/run`，请求体 `{"payload":"你好"}`，返回 `{"payload":"模型回答"}`。提供开始、大模型、收敛、返回节点，全部末端自动结束，接口只返回返回节点的数据。
+
+每个流程运行前确认恰好有一个开始和一个返回节点；返回节点必须接收一个上游且没有下游，不符合时返回公共业务错误。引擎接收单个 start_node_id，业务末端仍可有多个。其他分支独立结束但结果不混入响应，当前仍同步等待全部分支；后台任务和队列后续再做。
+
+config_loader.py 统一查询流程、解析定义、读取模型并结束事务，Service 组织执行；executor 准备节点、入口末端和返回策略，框架构建与执行交给 [ai/langgraph/engine.py](app/infrastructure/ai/langgraph/engine.py)。同级 [workflow_nodes](app/modules/workflow_nodes/README.md) 包的 base 子包维护 BaseNode 和共用数据，node 子包维护 StartNode、LlmNode、MergeNode、ReturnNode，外层 factory.py 按配置创建节点。公共 run 读取输入、调用 execute、记录日志并提交输出；LangGraph 负责调度和等待全部上游，收敛节点按上游ID收集结果，返回节点原样传递一个上游的数据。大模型接收一个上游，对象转为 JSON 文字后调用模型。阅读节点逻辑时先看 workflow_nodes/base/base_node.py，再看 node 下的具体实现。
+
+节点定义、输入和状态集中在 [workflow_nodes/base/data/](app/modules/workflow_nodes/base/data/README.md)，流程连线、流程定义、运行配置和最终结果在 [workflow_runtime/data/](app/modules/workflow_runtime/data/README.md)，每个对象一个文件；运行包依赖节点包，节点包不反向依赖。例如 runtime_config.workflow.nodes、node.config.model_config_id、result.payload，均有类型和中文 Attributes 文档；数据库和 JSON 存储字段不变。当前支持固定并行分支收敛，条件分支、循环和记忆后续再做。
+
+AI 框架接入集中在 [infrastructure/ai](app/infrastructure/ai/README.md)：langgraph 负责流程图构建和执行，langchain/model_client.py 负责模型创建，模型测试、调试台和大模型节点复用同一个入口。MCP、Skills、提示词、工具等实际接入时再建目录，对应的配置管理仍放 modules。
+
+默认 INFO 日志关联请求ID、流程ID与节点ID。需要排查数据时启动 `uv run python -m uvicorn main:app --reload --log-level debug`，在后端控制台查看节点输入和输出；模型配置和 Key 不输出。详见 [运行包文档](app/modules/workflow_runtime/README.md) 和 [最小流程定义](../docs/workflow-definition.md)。
 
 ## 代码阅读入口
 
@@ -38,7 +52,11 @@ uv run python -m uvicorn main:app --reload
 | [数据库公共能力](app/infrastructure/database/README.md) | 连接池、会话、ORM 公共字段和事务 |
 | [模型配置管理](app/modules/model_config/README.md) | 接口、数据结构、业务流程和数据库操作 |
 | [流程配置管理](app/modules/workflow_config/README.md) | 三字段流程表、文本定义、分页及基础增删改查 |
-| [模型调用公共能力](app/infrastructure/llm/README.md) | LangChain 模型集成、实体传参、基础地址和错误处理 |
+| [流程运行](app/modules/workflow_runtime/README.md) | 运行接口、统一配置加载、LangGraph 执行与日志 |
+| [流程节点](app/modules/workflow_nodes/README.md) | 节点基类、开始、大模型、收敛、返回与节点创建入口 |
+| [AI 公共能力](app/infrastructure/ai/README.md) | AI 框架接入与业务模块之间的职责 |
+| [LangGraph 图引擎](app/infrastructure/ai/langgraph/README.md) | 节点注册、连线、编译与执行 |
+| [模型调用公共能力](app/infrastructure/ai/langchain/README.md) | LangChain 模型集成、实体传参、基础地址和错误处理 |
 | [调试台](app/modules/playground/README.md) | 选择模型进行单轮问答，不保存聊天记录 |
 | [后端协作规则](AGENTS.md) | 后续中文注释和包文档维护约定 |
 

@@ -1,4 +1,4 @@
-"""流程配置业务：完成基础增删改查，流程定义按文本保存，不增加 JSON 解析和校验。"""
+"""流程配置业务：维护名称和定义文本，提供增删改查。"""
 
 from http import HTTPStatus
 from typing import Any

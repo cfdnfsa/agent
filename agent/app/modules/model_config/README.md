@@ -11,7 +11,7 @@
 | repository.py | SQLAlchemy 查询、保存和删除 |
 | entity.py | 表结构、has_api_key 计算值、统一排除 Key 的 to_dict |
 
-get_by_id 使用 Session.get 按主键查询，返回 ModelConfig 实体或 None。部分 PyCharm 版本会将结果误判为模型类，因此在返回处用 typing.cast 明确类型；它不转换对象、不校验字段，也不改变查询行为。
+get_by_id 使用 Session.get 按主键查询，返回 ModelConfig 实体或 None；list_by_ids 供流程运行前批量加载所需模型，含 Key 的完整实体仅用于内部执行。部分 PyCharm 版本会将结果误判为模型类，因此在返回处用 typing.cast 明确类型；它不转换对象、不校验字段，也不改变查询行为。
 
 公共 Base 只提供 id；模型配置不维护 created_at、updated_at。旧表执行 sql/remove_model_config_time_columns.sql 删除这两列；初始化脚本已经是去掉时间字段的最终结构，前端也不再展示更新时间。
 
@@ -56,7 +56,7 @@ create、update、delete 使用数据库公共包的 `@transactional`，不再�
 
 ## 模型测试
 
-Service 在只读事务中查询完整实体，结束事务归还连接后，通过 create_chat_model(model_config) 创建模型，再直接调用 model.invoke("Reply with OK only.")。会话使用 expire_on_commit=False，已加载字段仍可读取，不需要拆成多个参数或一直占用数据库连接。
+Service 在只读事务中查询完整实体，结束事务归还连接后，通过 [ai/langchain/model_client.py](../../infrastructure/ai/langchain/model_client.py) 中的 create_chat_model(model_config) 创建模型，再直接调用 model.invoke("Reply with OK only.")。会话使用 expire_on_commit=False，已加载字段仍可读取，不需要拆成多个参数或一直占用数据库连接。
 
 成功返回 data={"elapsed_ms":123}，不保存测试历史，不返回模型原始回复。SDK 调用失败沿用公共异常处理，返回 HTTP 500 和“服务器内部错误”，暂不区分各家的模型错误；测试为真实请求，可能产生费用。
 

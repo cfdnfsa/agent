@@ -25,6 +25,14 @@ class ModelConfigRepository:
         # 部分 PyCharm 版本误将 get 的结果推断成类；cast 只明确类型，不转换对象。
         return cast(ModelConfig | None, model_config)
 
+    # ---------- 批量查询流程需要的模型配置
+    def list_by_ids(self, model_ids: list[int], include_api_key: bool = False) -> Sequence[ModelConfig]:
+        """按 model_ids 一次读取模型实体，运行流程时显式传 include_api_key=True。"""
+        model_query = select(ModelConfig).where(ModelConfig.id.in_(model_ids))
+        if not include_api_key:
+            model_query = model_query.options(defer(ModelConfig.model_api_key, raiseload=True))
+        return self.db_session.scalars(model_query).all()
+
     # ---------- 分页查询模型配置
     def list_page(self, page: int, page_size: int) -> Sequence[ModelConfig]:
         """按主键倒序查询一页实体。

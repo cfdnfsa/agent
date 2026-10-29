@@ -1,4 +1,4 @@
-/** 流程配置接口：定义字段始终使用字符串，页面不解析或重写流程内容。 */
+/** 流程配置接口：定义字段通过字符串存储，画布按统一节点和连线结构读写。 */
 import { request } from './request'
 
 export interface WorkflowConfig {
@@ -18,6 +18,10 @@ export interface WorkflowConfigPage {
   total: number
   page: number
   page_size: number
+}
+
+export interface WorkflowResult {
+  payload: unknown
 }
 
 /** page 是页码，pageSize 是每页数量，返回流程概要分页。 */
@@ -42,4 +46,13 @@ export function saveWorkflowConfig(workflowId: number | null, workflowConfig: Wo
 /** 删除指定流程，成功时公共响应中的 data 为 null。 */
 export function deleteWorkflowConfig(workflowId: number): Promise<null> {
   return request(`/api/workflow-configs/${workflowId}`, { method: 'DELETE' })
+}
+
+/** 运行已保存流程，只提交本次文字并返回最终结果，不携带历史或模型密钥。 */
+export function runWorkflowConfig(workflowId: number, payload: string): Promise<WorkflowResult> {
+  return request(`/api/workflow-configs/${workflowId}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ payload }),
+  })
 }

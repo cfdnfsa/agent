@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vue-flow/core": "1.48.2",
     "element-plus": "2.14.7",
     "vue": "3.5.44",
     "vue-router": "5.4.0"

@@ -21,6 +21,6 @@ POST /api/playground/chat
 
 服务使用 model_config_id 和 question 这两个字段，不额外检查必填、空字符串、长度或去除空格。JSON 的基础解析、数据库约束、LangChain/SDK 自身要求仍生效；缺字段、模型配置不存在或调用失败时，直接沿用统一错误处理。
 
-读取配置后结束数据库事务，通过 create_chat_model(model_config) 创建模型，再直接调用 model.invoke(question)，用 str(response.text) 取得回答。内部传递数据库实体，不拆散地址和 Key，也不创建重复配置对象。每次 invoke 只包含当前问题，没有历史上下文或会话ID。
+读取配置后结束数据库事务，通过 [ai/langchain/model_client.py](../../infrastructure/ai/langchain/model_client.py) 中的 create_chat_model(model_config) 创建模型，再直接调用 model.invoke(question)，用 str(response.text) 取得回答。内部传递数据库实体，不拆散地址和 Key，也不创建重复配置对象。每次 invoke 只包含当前问题，没有历史上下文或会话ID。
 
 业务日志只记录请求ID、模型ID和耗时，不记录问答正文或 Key。SDK 异常沿用公共异常处理，返回 HTTP 500 和“服务器内部错误”，暂不增加模型错误分类。修改接口或调用行为时同步维护本文件。

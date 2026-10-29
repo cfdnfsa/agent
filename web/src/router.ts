@@ -7,6 +7,7 @@ export const router = createRouter({
     { path: '/', redirect: '/model-configs' },
     { path: '/model-configs', component: () => import('./views/ModelConfigs.vue') },
     { path: '/workflow-configs', component: () => import('./views/WorkflowConfigs.vue') },
+    { path: '/workflow-configs/:workflowId', component: () => import('./views/WorkflowDesigner.vue'), meta: { fullscreen: true } },
     { path: '/playground', component: () => import('./views/Playground.vue') },
   ],
 })

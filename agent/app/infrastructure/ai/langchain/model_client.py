@@ -1,4 +1,4 @@
-"""模型创建公共入口：使用数据库实体创建 LangChain 模型，调用由 Service 完成。"""
+"""LangChain 模型创建入口：使用数据库实体创建模型，调用由 Service 或流程节点完成。"""
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models.chat_models import BaseChatModel

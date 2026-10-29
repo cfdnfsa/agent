@@ -1,6 +1,8 @@
 # 流程配置管理（个人极简版）
 
-本包只做流程配置的新增、分页列表、详情、修改和删除。流程定义作为文本原样保存，当前不解析 JSON、不校验节点或连线，也不执行流程。
+本包只负责流程配置的新增、列表、详情、修改和删除，定义文本原样存储，不解析或执行节点。运行能力位于独立的 [workflow_runtime 包](../workflow_runtime/README.md)。
+
+保存字段是普通字符串，节点结构由运行模块解释，格式见 [最小流程定义](../../../../docs/workflow-definition.md)。
 
 ## 文件职责
 
@@ -8,7 +10,7 @@
 |---|---|
 | entity.py | 映射流程表三个字段，提供完整实体的 to_dict |
 | repository.py | ORM 查询、保存和删除；列表只查询 ID、名称 |
-| service.py | 编排增删改查，写操作使用公共 @transactional |
+| service.py | 配置增删改查，写操作使用公共 @transactional |
 | router.py | 注入当前请求的 Service，包装 Result 和 Page |
 
 Service 和 Repository 共用同一个请求 Session。get_by_id 返回实体或 None，使用 typing.cast 兼容部分 PyCharm 的查询结果类型推断，不做数据转换。
