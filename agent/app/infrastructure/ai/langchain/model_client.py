@@ -57,7 +57,9 @@ def create_anthropic_model(model_config: ModelConfig) -> ChatAnthropic:
 # ---------- 创建 Ollama 模型
 def create_ollama_model(model_config: ModelConfig) -> ChatOllama:
     """使用数据库实体创建 Ollama 模型；有 Key 时附加鉴权头。"""
-    headers = {"Authorization": f"Bearer {model_config.model_api_key}"} if model_config.model_api_key else {}
+    headers: dict[str, str] = {}
+    if model_config.model_api_key:
+        headers["Authorization"] = f"Bearer {model_config.model_api_key}"
     return ChatOllama(
         model=model_config.model_code,
         base_url=model_config.model_base_url,

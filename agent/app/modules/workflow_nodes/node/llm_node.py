@@ -32,7 +32,13 @@ class LlmNode(BaseNode):
         Returns:
             模型回答正文；请求参数使用现有公共模型配置。
         """
-        input_text = node_input if isinstance(node_input, str) else json.dumps(node_input, ensure_ascii=False)
+
+        if isinstance(node_input, str):
+            input_text = node_input
+        else:
+            input_text = json.dumps(node_input, ensure_ascii=False)
+
         # 创建模型对象后，invoke 才真正发送请求。
         model = create_chat_model(self.model_config)
-        return str(model.invoke(input_text).text)
+        txt = model.invoke(input_text).text
+        return str(txt)

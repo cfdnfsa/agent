@@ -62,4 +62,4 @@ AI 框架接入集中在 [infrastructure/ai](app/infrastructure/ai/README.md)：
 
 各代码文件中已补充中文说明。项目使用 Python 命名空间包，不放空的 `__init__.py`；仍从当前后端根目录使用 `uvicorn main:app --reload` 启动。
 
-维护时优先采用直白的普通函数和现有分层，辅助方法默认不加前导 `_`。具体要求记录在 `AGENTS.md`；`model_client.py` 通过数据库实体创建 LangChain 模型，URL 原样传给 SDK；模型测试和问答在各自 Service 中直接调用框架的 invoke。模型异常暂时沿用公共错误处理，不单独分类。
+维护时优先采用直白的普通函数和现有分层，辅助方法默认不加前导 `_`。条件表达式展开为普通多行 if / else，集合使用普通 for 循环构建，可读性优先于减少行数。具体要求记录在 `AGENTS.md`；`model_client.py` 通过数据库实体创建 LangChain 模型，URL 原样传给 SDK；模型测试和问答在各自 Service 中直接调用框架的 invoke。模型异常暂时沿用公共错误处理，不单独分类。

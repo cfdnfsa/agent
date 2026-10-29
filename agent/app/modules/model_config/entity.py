@@ -31,8 +31,8 @@ class ModelConfig(Base):
     # ---------- 输出配置字段并排除 Key
     def to_dict(self) -> dict[str, Any]:
         """直接读取实体字段用于 JSON 返回，唯一排除 model_api_key，不再定义独立出参类。"""
-        return {
-            field.key: getattr(self, field.key)
-            for field in self.__mapper__.column_attrs
-            if field.key != "model_api_key"
-        }
+        model_data: dict[str, Any] = {}
+        for field in self.__mapper__.column_attrs:
+            if field.key != "model_api_key":
+                model_data[field.key] = getattr(self, field.key)
+        return model_data

@@ -12,7 +12,10 @@ class MergeNode(BaseNode):
     # ---------- 收集各个上游的输出
     def read_input(self, state: WorkflowState) -> dict[str, Any]:
         """按上游ID保留结果边界，节点改名不会影响数据定位。"""
-        return {source_id: state.node_outputs[source_id] for source_id in self.source_ids}
+        upstream_outputs: dict[str, Any] = {}
+        for source_id in self.source_ids:
+            upstream_outputs[source_id] = state.node_outputs[source_id]
+        return upstream_outputs
 
     # ---------- 输出收敛后的数据
     def execute(self, node_input: Any) -> Any:

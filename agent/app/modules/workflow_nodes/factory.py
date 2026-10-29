@@ -31,7 +31,10 @@ def create_node(definition: WorkflowNode, source_ids: list[str]) -> BaseNode:
         return ReturnNode(definition, source_ids)
     if definition.type == "llm":
         model_id = definition.config.model_config_id
-        model_config = get_model_config(model_id) if model_id is not None else None
+        if model_id is None:
+            model_config = None
+        else:
+            model_config = get_model_config(model_id)
         if model_config is None:
             raise BusinessError("流程引用的模型配置不存在", HTTPStatus.NOT_FOUND)
         return LlmNode(definition, source_ids, model_config)

@@ -60,10 +60,11 @@ async def validation_error_handler(request: Request, exception: Exception) -> JS
     if not isinstance(exception, RequestValidationError):
         raise exception
     # type 是错误类型，loc 是字段位置，msg 是原因；不用原始 input，避免回显密钥。
-    validation_errors = [
-        {"type": field_error["type"], "loc": field_error["loc"], "msg": field_error["msg"]}
-        for field_error in exception.errors()
-    ]
+    validation_errors: list[dict[str, Any]] = []
+    for field_error in exception.errors():
+        validation_errors.append({
+            "type": field_error["type"], "loc": field_error["loc"], "msg": field_error["msg"]
+        })
     return build_error_response(request, HTTPStatus.UNPROCESSABLE_ENTITY, "参数校验失败", validation_errors)
 
 
@@ -72,8 +73,12 @@ async def http_error_handler(request: Request, exception: Exception) -> JSONResp
     """将找不到路由、请求方法不支持等 HTTP 错误转换为统一结构。"""
     if not isinstance(exception, HTTPException):
         raise exception
-    error_message = exception.detail if isinstance(exception.detail, str) else "请求处理失败"
-    error_details = None if isinstance(exception.detail, str) else exception.detail
+    if isinstance(exception.detail, str):
+        error_message = exception.detail
+        error_details = None
+    else:
+        error_message = "请求处理失败"
+        error_details = exception.detail
     # 保留框架生成的响应头，例如 405 响应中的 Allow。
     return build_error_response(request, exception.status_code, error_message, error_details, exception.headers)
 

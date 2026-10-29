@@ -20,7 +20,9 @@ class ModelConfigRepository:
     # ---------- 按主键查询模型配置
     def get_by_id(self, model_id: int, include_api_key: bool = False) -> ModelConfig | None:
         """按ID返回实体；普通查询不取 Key，模型测试、问答时传 include_api_key=True。"""
-        options = [] if include_api_key else [defer(ModelConfig.model_api_key, raiseload=True)]
+        options = []
+        if not include_api_key:
+            options.append(defer(ModelConfig.model_api_key, raiseload=True))
         model_config = self.db_session.get(ModelConfig, model_id, options=options)
         # 部分 PyCharm 版本误将 get 的结果推断成类；cast 只明确类型，不转换对象。
         return cast(ModelConfig | None, model_config)

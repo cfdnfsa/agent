@@ -48,8 +48,11 @@ class ModelConfigService:
         """按传入页码和数量查询，不做范围校验；JSON 输出只排除 Key。"""
         total_count = self.model_config_repository.count()
         model_configs = self.model_config_repository.list_page(page, page_size)
+        model_items: list[dict[str, Any]] = []
+        for model_config in model_configs:
+            model_items.append(model_config.to_dict())
         return Page(
-            items=[model_config.to_dict() for model_config in model_configs],
+            items=model_items,
             total=total_count, page=page, page_size=page_size,
         )
 

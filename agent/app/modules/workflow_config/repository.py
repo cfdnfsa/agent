@@ -42,10 +42,11 @@ class WorkflowConfigRepository:
             .limit(page_size)
         )
         # RowMapping 同时允许列对象作为索引键；这里按列名生成字典，用 cast 明确字符串键类型。
-        return [
-            cast(dict[str, Any], dict(workflow_row))
-            for workflow_row in self.db_session.execute(workflow_query).mappings()
-        ]
+        workflow_summaries: list[dict[str, Any]] = []
+        for workflow_row in self.db_session.execute(workflow_query).mappings():
+            workflow_summary = cast(dict[str, Any], dict(workflow_row))
+            workflow_summaries.append(workflow_summary)
+        return workflow_summaries
 
     # ---------- 查询流程配置总数
     def count(self) -> int:

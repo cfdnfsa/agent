@@ -25,4 +25,7 @@ class WorkflowConfig(Base):
     # ---------- 输出流程配置字段
     def to_dict(self) -> dict[str, Any]:
         """直接输出实体的三个映射字段，流程定义保持字符串，不转换为 JSON 对象。"""
-        return {field.key: getattr(self, field.key) for field in self.__mapper__.column_attrs}
+        workflow_data: dict[str, Any] = {}
+        for field in self.__mapper__.column_attrs:
+            workflow_data[field.key] = getattr(self, field.key)
+        return workflow_data
