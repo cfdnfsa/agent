@@ -23,9 +23,9 @@ workflowConfigs.ts 使用 /api/workflow-configs，复用相同的 request 函数
 | getWorkflowConfig(workflowId) | GET 详情，包含完整定义字符串 |
 | saveWorkflowConfig(workflowId, workflowConfig) | ID 为 null 时 POST 新增，否则 PUT 修改 |
 | deleteWorkflowConfig(workflowId) | DELETE 指定流程 |
-| runWorkflowConfig(workflowId, payload) | POST /{id}/run，只提交本次文字，返回最终 payload |
+| runWorkflowConfig(workflowId, workflowInput) | POST /{id}/run，提交固定输入 text、可选 user_id，返回最终 payload |
 
-WorkflowResult 只包含 payload，不再维护步骤列表、调试结果和 debug 查询参数。失败沿用 request 的公共错误处理，由页面展示公开说明，详细排查信息留在后端日志。
+WorkflowInput 对应后端同名对象，text 为本次文字，user_id 为可选字符串或 null，直接作为运行请求体序列化，不额外包一层字段。WorkflowResult 只包含 payload，支持文字、对象或列表，不维护步骤列表、调试结果和 debug 查询参数。失败沿用 request 的公共错误处理，由页面展示公开说明，详细排查信息留在后端日志。
 
 WorkflowConfigSummary 通过 Pick 表示列表实际返回的两个字段，WorkflowConfigRequest 通过 Omit 排除自增 ID；这些仅是 TypeScript 类型，不创建运行时 DTO。接口中的 workflow_definition 始终为字符串；画布页解析、编辑后序列化流程结构，接口模块只负责序列化外层 HTTP 请求体，不再改写定义。
 

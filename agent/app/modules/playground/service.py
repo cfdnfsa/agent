@@ -4,21 +4,14 @@ from http import HTTPStatus
 from time import perf_counter
 from typing import Any
 
-from sqlalchemy.orm import Session
-
 from app.core.app_logging import logger, request_id_context
 from app.core.errors.exceptions import BusinessError
 from app.infrastructure.ai.langchain.model_client import create_chat_model
-from app.modules.model_config.repository import ModelConfigRepository
+from app.modules.model_config.cache import get_model_config
 
 
 class PlaygroundService:
     """不维护上下文，不保存问答记录，不增加请求字段校验。"""
-
-    # ---------- 初始化调试台服务
-    def __init__(self, db_session: Session):
-        self.db_session = db_session
-        self.model_config_repository = ModelConfigRepository(db_session)
 
     # ---------- 执行单轮模型问答
     def ask_model(self, request_data: dict[str, Any]) -> dict[str, str]:
@@ -31,11 +24,10 @@ class PlaygroundService:
             包含 answer 文本的字典，模型调用失败交给公共异常处理。
         """
         model_id = request_data["model_config_id"]
-        with self.db_session.begin():
-            model_config = self.model_config_repository.get_by_id(model_id, include_api_key=True)
-            if model_config is None:
-                raise BusinessError("模型配置不存在，请重新选择模型。", HTTPStatus.NOT_FOUND)
-        # expire_on_commit=False 保留已加载字段，结束事务后仍能直接使用实体。
+        model_config = get_model_config(model_id)
+        if model_config is None:
+            raise BusinessError("模型配置不存在，请重新选择模型。", HTTPStatus.NOT_FOUND)
+        # 缓存未命中时的查询已在读取入口结束，不把数据库会话带入模型调用。
         call_started_at = perf_counter()
 
         logger.info("请求ID=%s 操作=调试台问答开始 模型ID=%s", request_id_context.get(), model_id)

@@ -5,7 +5,6 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends
 
 from app.core.response.responses import ERROR_RESPONSES, Result
-from app.infrastructure.database.db_connection import DbSession
 from app.modules.playground.service import PlaygroundService
 
 
@@ -13,9 +12,9 @@ router = APIRouter(prefix="/api/playground", tags=["调试台"], responses=ERROR
 
 
 # ---------- 提供调试台服务
-def get_playground_service(db_session: DbSession) -> PlaygroundService:
-    """提供当前请求使用的服务。"""
-    return PlaygroundService(db_session)
+def get_playground_service() -> PlaygroundService:
+    """提供当前请求的服务，配置缓存入口按需管理自己的短查询会话。"""
+    return PlaygroundService()
 
 
 PlaygroundServiceDependency = Annotated[PlaygroundService, Depends(get_playground_service)]

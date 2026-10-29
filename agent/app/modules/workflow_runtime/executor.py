@@ -1,6 +1,6 @@
 """流程运行组织：总入口按顺序调用小方法，具体步骤仍放在本文件中。
 
-查找唯一入口和返回节点 → 创建业务节点 → 找出全部业务末端 → 执行图 → 取出返回节点数据
+读取已保存的入口和返回ID → 整理关系并创建节点 → 找出全部业务末端 → 执行图 → 取出返回节点数据
 """
 
 from typing import Any
@@ -9,35 +9,36 @@ from app.core.errors.exceptions import BusinessError
 from app.infrastructure.ai.langgraph.engine import run_graph
 from app.modules.workflow_nodes.base.base_node import BaseNode
 from app.modules.workflow_nodes.base.data.workflow_input import WorkflowInput
-from app.modules.workflow_nodes.base.data.workflow_node import WorkflowNode
 from app.modules.workflow_nodes.base.data.workflow_state import WorkflowState
 from app.modules.workflow_nodes.factory import create_node
 from app.modules.workflow_runtime.data.workflow_definition import WorkflowDefinition
 from app.modules.workflow_runtime.data.workflow_result import WorkflowResult
-from app.modules.workflow_runtime.data.workflow_runtime_config import WorkflowRuntimeConfig
 
 
 # ---------- 组织本次流程运行
-def run_workflow(runtime_config: WorkflowRuntimeConfig, workflow_input: WorkflowInput) -> WorkflowResult:
+def run_workflow(workflow_definition: WorkflowDefinition, workflow_input: WorkflowInput) -> WorkflowResult:
     """准备节点对象、交给图引擎运行，只返回唯一返回节点的数据。
 
     Args:
-        runtime_config: 准备好的流程和模型配置，执行时不再查库。
-        workflow_input: 本次输入，通过 .payload 取得实际业务内容。
+        workflow_definition: 已加载的流程定义；节点准备时按需读取模型缓存，再执行图。
+        workflow_input: 本次输入，.text 交给开始节点，.user_id 留在状态中供后续节点读取。
 
     Returns:
         返回节点的输出，其他独立末端只参与执行。
     """
 
-    # 先检查唯一入口，非法配置不会进入节点创建和图执行。
+    # 入口和返回位置由流程定义明确指定，不再遍历节点寻找它们。
+    start_node_id = workflow_definition.start_node_id
+    return_node_id = workflow_definition.return_node_id
+    if start_node_id is None:
+        raise BusinessError("流程需要指定开始节点")
+    if return_node_id is None:
+        raise BusinessError("流程需要指定返回节点")
 
-    # 开始节点
-    start_node_id = find_start_node_id(runtime_config.workflow.nodes)
-    # 返回节点
-    return_node_id = find_return_node_id(runtime_config.workflow)
-
-    runtime_nodes = create_runtime_nodes(runtime_config)
-    terminal_node_ids = find_terminal_node_ids(runtime_config.workflow)
+    # 整理上游时一并检查ID引用、节点唯一性和返回节点连线，再创建对象。
+    runtime_nodes = create_runtime_nodes(workflow_definition)
+    # 其他分支也可能独立结束，所以仍根据连线识别全部末端。
+    terminal_node_ids = find_terminal_node_ids(workflow_definition)
 
     # 每次运行创建独立状态，具体连线和执行交给 LangGraph 引擎。
     node_outputs = run_graph(
@@ -46,84 +47,59 @@ def run_workflow(runtime_config: WorkflowRuntimeConfig, workflow_input: Workflow
         terminal_node_ids=terminal_node_ids,
         initial_state=WorkflowState(inputs=workflow_input),
     )
+
     return build_workflow_result(node_outputs, return_node_id)
 
 
-# ---------- 查找唯一的开始节点
-def find_start_node_id(node_definitions: list[WorkflowNode]) -> str:
-    """找到业务入口，缺少或存在多个开始节点时抛出公共业务异常。
-
-    Args:
-        node_definitions: 已从保存的流程中解析出的节点定义，当前只遍历内存数据。
-
-    Returns:
-        唯一开始节点的ID，用于连接 LangGraph 的 START。
-    """
-    start_node_id: str | None = None
-    for definition in node_definitions:
-        if definition.type == "start":
-            if start_node_id is not None:
-                raise BusinessError("流程只能有一个开始节点")
-            start_node_id = definition.id
-    if start_node_id is None:
-        raise BusinessError("流程需要一个开始节点")
-    return start_node_id
-
-
-# ---------- 查找唯一且没有下游的返回节点
-def find_return_node_id(workflow_definition: WorkflowDefinition) -> str:
-    """确认响应来自一个明确的返回节点，该节点只能作为分支终点。
-
-    Args:
-        workflow_definition: 已解析的流程，用节点查找返回类型，用连线检查下游。
-
-    Returns:
-        唯一返回节点的ID；缺少、重复、上游不是一个或连接下游时抛出业务异常。
-    """
-    return_node_id: str | None = None
-
-    for definition in workflow_definition.nodes:
-        if definition.type == "return":
-            if return_node_id is not None:
-                raise BusinessError("流程只能有一个返回节点")
-            return_node_id = definition.id
-
-    if return_node_id is None:
-        raise BusinessError("流程需要一个返回节点")
-
-    source_count = 0
-    for edge in workflow_definition.edges:
-        if edge.source == return_node_id:
-            raise BusinessError("返回节点不能连接下游节点")
-        if edge.target == return_node_id:
-            source_count += 1
-    if source_count != 1:
-        raise BusinessError("返回节点需要连接一个上游，多路输入请先连接收敛节点")
-    return return_node_id
-
-
 # ---------- 按流程配置创建业务节点
-def create_runtime_nodes(runtime_config: WorkflowRuntimeConfig) -> list[BaseNode]:
-    """整理上游关系，并为每份节点定义创建对应的业务节点对象。
+def create_runtime_nodes(workflow_definition: WorkflowDefinition) -> list[BaseNode]:
+    """整理上游时确认开始、返回ID与实际节点一致，再创建业务节点对象。
 
     Args:
-        runtime_config: 已加载的流程和模型实体，不在这里查询数据库。
+        workflow_definition: 已加载的节点与连线；大模型配置由 factory 通过缓存入口取得。
 
     Returns:
         配置就绪的节点对象；此时只创建对象，还未执行节点的 run 方法。
     """
-    node_definitions = runtime_config.workflow.nodes
+    node_definitions = workflow_definition.nodes
 
-    # 每条连线的 target 是接收方，source 是它需要读取结果的上游。
-    # 先给所有节点准备空列表
-    incoming: dict[str, list[str]] = {node.id: [] for node in node_definitions}
+    # 准备上游列表的同一轮循环中检查类型和唯一性，不再单独查找开始、返回节点。
+    incoming: dict[str, list[str]] = {}
+    start_node_count = 0
+    return_node_count = 0
+    for node in node_definitions:
+        incoming[node.id] = []
+        if node.type == "start":
+            start_node_count += 1
+            if node.id != workflow_definition.start_node_id:
+                raise BusinessError("start_node_id 必须指向流程中唯一的开始节点")
+        if node.type == "return":
+            return_node_count += 1
+            if node.id != workflow_definition.return_node_id:
+                raise BusinessError("return_node_id 必须指向流程中唯一的返回节点")
+    if start_node_count != 1:
+        raise BusinessError("流程需要且只能有一个开始节点")
+    if return_node_count != 1:
+        raise BusinessError("流程需要且只能有一个返回节点")
 
-    for edge in runtime_config.workflow.edges:
+    # target 接收 source 的输出；例如 A → B，会把 A 放入 incoming[B]。
+    return_source_count = 0
+    for edge in workflow_definition.edges:
+        if edge.source == workflow_definition.return_node_id:
+            raise BusinessError("返回节点不能连接下游节点")
+        if edge.target == workflow_definition.return_node_id:
+            return_source_count += 1
         incoming[edge.target].append(edge.source)
+    if return_source_count != 1:
+        raise BusinessError("返回节点需要连接一个上游，多路输入请先连接收敛节点")
 
+    # 结构确认后再创建对象，避免无效流程提前加载模型配置。
     runtime_nodes: list[BaseNode] = []
     for definition in node_definitions:
-        runtime_nodes.append(create_node(definition, incoming[definition.id], runtime_config.model_configs))
+        runtime_nodes.append(
+            create_node(definition, incoming[definition.id])
+        )
+
     return runtime_nodes
 
 
@@ -138,7 +114,10 @@ def find_terminal_node_ids(workflow_definition: WorkflowDefinition) -> list[str]
         所有没有下游的节点ID，保留定义中的节点顺序，可以有多个。
     """
     # 出现在 source 中，说明这个节点还有向外的连线。
-    has_successor = {edge.source for edge in workflow_definition.edges}
+    has_successor: set[str] = set()
+    for edge in workflow_definition.edges:
+        has_successor.add(edge.source)
+
     terminal_node_ids: list[str] = []
     for definition in workflow_definition.nodes:
         if definition.id not in has_successor:

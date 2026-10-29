@@ -4,12 +4,14 @@
 
 | 文件 | 对象 | 用途 |
 |---|---|---|
-| workflow_input.py | WorkflowInput | 本次流程输入，payload 为动态业务内容 |
+| workflow_input.py | WorkflowInput | 固定输入 text 与可选 user_id，可通过属性补全读取 |
 | workflow_node_config.py | WorkflowNodeConfig | 节点配置，例如模型配置ID |
 | workflow_node.py | WorkflowNode | 保存的节点ID、类型、配置和名称 |
 | workflow_state.py | WorkflowState | 本次输入与各节点输出，运行之间互不共享 |
 
 各处直接从对应文件导入类，不通过 __init__.py 转发。workflow_state.py 同时维护 merge_node_outputs，它只合并状态存储增量，不负责分支等待。
+
+WorkflowInput(text="你好", user_id="user_001") 表示本次文字和预留用户ID；user_id 不传时为 None。开始节点输出 inputs.text，用户ID留在 inputs.user_id 中供后续节点读取，不自动拼进模型问题。节点输出仍可为文字、对象或列表。
 
 WorkflowNode.from_dict(node_data) 是类自己的创建入口，集中读取单个节点字典并创建 WorkflowNodeConfig，保留已有字段和默认值，不增加校验或改写输入。解析流程时只遍历并调用该方法；它创建的是配置定义，外层 factory.py 的 create_node 才创建实际执行的业务节点。
 

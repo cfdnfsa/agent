@@ -35,9 +35,14 @@ def run_graph(
     Returns:
         按节点ID索引的输出，业务层再选择哪些数据作为接口返回。
     """
+
+    # 创建流程图  指定运行数据的结构
     graph = StateGraph(WorkflowState)
+    # 登记节点及其执行方法
     register_nodes(graph, nodes)
+    # 连线
     connect_edges(graph, nodes, start_node_id, terminal_node_ids)
+
     return execute_graph(graph, initial_state)
 
 
@@ -94,7 +99,10 @@ def execute_graph(graph: StateGraph[WorkflowState], initial_state: WorkflowState
     Returns:
         所有已执行节点的输出，按节点ID索引；接口返回选择仍由业务层决定。
     """
+
     # compile 准备图；invoke 才真正执行，并等待本次图运行完成。
     compiled_graph = graph.compile()
+    # 执行图
     completed_state = compiled_graph.invoke(initial_state)
+
     return completed_state["node_outputs"]

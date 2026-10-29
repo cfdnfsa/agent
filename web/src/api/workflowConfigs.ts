@@ -20,6 +20,14 @@ export interface WorkflowConfigPage {
   page_size: number
 }
 
+/** 本次运行的固定输入，直接对应后端 WorkflowInput，不写入流程定义。 */
+export interface WorkflowInput {
+  /** 用户本次输入的文字。 */
+  text: string
+  /** 用户ID暂时预留，可不传或传 null。 */
+  user_id?: string | null
+}
+
 export interface WorkflowResult {
   payload: unknown
 }
@@ -48,11 +56,11 @@ export function deleteWorkflowConfig(workflowId: number): Promise<null> {
   return request(`/api/workflow-configs/${workflowId}`, { method: 'DELETE' })
 }
 
-/** 运行已保存流程，只提交本次文字并返回最终结果，不携带历史或模型密钥。 */
-export function runWorkflowConfig(workflowId: number, payload: string): Promise<WorkflowResult> {
+/** 提交本次文字与可选用户ID，返回节点结果可以是文字或 JSON 数据。 */
+export function runWorkflowConfig(workflowId: number, workflowInput: WorkflowInput): Promise<WorkflowResult> {
   return request(`/api/workflow-configs/${workflowId}/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ payload }),
+    body: JSON.stringify(workflowInput),
   })
 }

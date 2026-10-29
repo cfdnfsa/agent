@@ -24,7 +24,7 @@ class WorkflowState:
     """每次请求独立创建的图运行状态，不写回配置或数据库。
 
     Attributes:
-        inputs: 本次运行输入，通过 inputs.payload 取得实际业务内容。
+        inputs: 本次运行输入，通过 inputs.text 读取文字、inputs.user_id 读取预留用户ID。
         node_outputs: 按节点ID索引的输出，值允许文字、对象或列表。
     """
 
@@ -34,5 +34,6 @@ class WorkflowState:
         __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
 
     inputs: WorkflowInput
+
     # Annotated 告诉 LangGraph：并行更新此字段时，调用上面的合并函数。
-    node_outputs: Annotated[dict[str, Any], merge_node_outputs] = field(default_factory=dict)
+    node_outputs: Annotated[dict[str, Any],merge_node_outputs] = field(default_factory=dict)

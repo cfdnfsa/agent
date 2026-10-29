@@ -46,11 +46,11 @@ Service 和 Repository 共用同一个请求 Session。get_by_id 返回实体或
 ```json
 {
   "workflow_name": "文章总结",
-  "workflow_definition": "{\"nodes\":[],\"edges\":[]}"
+  "workflow_definition": "{\"start_node_id\":null,\"return_node_id\":null,\"nodes\":[],\"edges\":[]}"
 }
 ```
 
-workflow_definition 在请求和响应中都是字符串，示例里的转义符用于在 HTTP JSON 中表达字符串；后端不进行第二次解析，不自动添加节点、去空格或重写内容。空字符串也按原值保存。数据库已有的非空、类型、长度约束和 FastAPI 基础解析仍生效。
+workflow_definition 在请求和响应中都是字符串，示例里的转义符用于在 HTTP JSON 中表达字符串；此处保存的是尚未配置节点的草稿，运行前需添加开始、返回节点并填写对应ID。配置管理不进行第二次解析，不自动添加节点、去空格或重写内容。空字符串也按原值保存。数据库已有的非空、类型、长度约束和 FastAPI 基础解析仍生效。
 
 列表使用只选择两列的 SQL，流程定义不会从数据库取出。SQLAlchemy RowMapping 同时支持列名和列对象作索引键，当前结果按列名转成普通字典，并用 typing.cast 明确 dict[str, Any]，避免 IDE 将键推断成宽泛联合类型；数据不转换或校验。结果放在 data.items 中，data 还包含 total、page、page_size。详情、新增和修改通过实体 to_dict 返回三个字段，不建立重复 DTO。
 

@@ -9,7 +9,7 @@ import {
   workflowNodeLabel, workflowNodeTypes,
   type WorkflowCanvasEdgeData, type WorkflowCanvasNodeData, type WorkflowDefinition, type WorkflowNodeType,
 } from '../components/workflowNodes'
-import { getWorkflowConfig, runWorkflowConfig, saveWorkflowConfig, type WorkflowResult } from '../api/workflowConfigs'
+import { getWorkflowConfig, runWorkflowConfig, saveWorkflowConfig, type WorkflowInput, type WorkflowResult } from '../api/workflowConfigs'
 import { listModelConfigs, type ModelConfig } from '../api/modelConfigs'
 
 const route = useRoute()
@@ -20,7 +20,7 @@ const nodes = shallowRef<Node<WorkflowCanvasNodeData>[]>([])
 const edges = shallowRef<Edge<WorkflowCanvasEdgeData>[]>([])
 const workflowId = ref<number | null>(null)
 const workflowName = ref('')
-const originalDefinition = ref<WorkflowDefinition>({ nodes: [], edges: [] })
+const originalDefinition = ref<WorkflowDefinition>({ start_node_id: null, return_node_id: null, nodes: [], edges: [] })
 const rawDefinition = ref('')
 const selectedNodeId = ref<string | null>(null)
 const selectedEdgeId = ref<string | null>(null)
@@ -35,16 +35,20 @@ const modelError = ref('')
 const saveError = ref('')
 const runError = ref('')
 const successMessage = ref('')
-const testInput = ref('')
+// 运行输入与流程配置分开，始终通过固定字段访问，不随保存画布写入数据库。
+const workflowInput = reactive<WorkflowInput>({ text: '', user_id: null })
 const runResult = ref<WorkflowResult | null>(null)
 const showToolbox = ref(true)
 const showSettings = ref(true)
 const isReadOnly = computed(() => route.query.readonly === '1')
 const isBusy = computed(() => isLoading.value || isSaving.value || isRunning.value)
 const canEdit = computed(() => !isReadOnly.value && !isBusy.value && !loadError.value && !definitionError.value)
-const startNodeCount = computed(() => nodes.value.filter(node => node.data?.definition.type === 'start').length)
-const returnNodeCount = computed(() => nodes.value.filter(node => node.data?.definition.type === 'return').length)
-const canRun = computed(() => canEdit.value && startNodeCount.value === 1 && returnNodeCount.value === 1)
+const startNodes = computed(() => nodes.value.filter(node => node.data?.definition.type === 'start'))
+const returnNodes = computed(() => nodes.value.filter(node => node.data?.definition.type === 'return'))
+// 根据当前画布推导ID，按钮删除、键盘删除和重新添加都会自动同步，保存时不沿用旧ID。
+const startNodeId = computed(() => startNodes.value[0]?.id ?? null)
+const returnNodeId = computed(() => returnNodes.value[0]?.id ?? null)
+const canRun = computed(() => canEdit.value && startNodes.value.length === 1 && returnNodes.value.length === 1)
 const selectedDefinition = computed(() => nodes.value.find(node => node.id === selectedNodeId.value)?.data?.definition ?? null)
 const hasSelection = computed(() => selectedDefinition.value !== null || edges.value.some(edge => edge.id === selectedEdgeId.value))
 
@@ -61,9 +65,12 @@ function formatData(value: unknown): string {
 /** 按当前流程结构读取节点和连线，保存前不改写数据库。 */
 async function applyDefinition(): Promise<void> {
   try {
-    const definition: WorkflowDefinition = rawDefinition.value === '' ? { nodes: [], edges: [] } : JSON.parse(rawDefinition.value)
+    const definition: WorkflowDefinition = rawDefinition.value === '' ? { start_node_id: null, return_node_id: null, nodes: [], edges: [] } : JSON.parse(rawDefinition.value)
     if (!definition || !Array.isArray(definition.nodes) || !Array.isArray(definition.edges)) {
       throw new Error('流程定义需要包含 nodes 和 edges 列表。')
+    }
+    if ((definition.start_node_id !== null && typeof definition.start_node_id !== 'string') || (definition.return_node_id !== null && typeof definition.return_node_id !== 'string')) {
+      throw new Error('流程定义需要包含 start_node_id 和 return_node_id；未添加对应节点时填写 null。')
     }
     // 这里只检查画布显示所需结构，不校验模型、参数内容或流程业务规则。
     if (definition.nodes.some(node => !node || typeof node.id !== 'string' || typeof node.type !== 'string' || !node.config || typeof node.config !== 'object' || Array.isArray(node.config))) {
@@ -78,7 +85,7 @@ async function applyDefinition(): Promise<void> {
       data: reactive({ definition: node }),
     }))
     edges.value = definition.edges.map(edge => ({ ...edge, type: 'smoothstep', markerEnd: MarkerType.ArrowClosed, data: { definition: edge } }))
-    selectedNodeId.value = nodes.value.find(node => node.data?.definition.type === 'start')?.id ?? null
+    selectedNodeId.value = definition.start_node_id
     selectedEdgeId.value = null
     definitionError.value = ''
     await nextTick()
@@ -98,14 +105,15 @@ async function loadWorkflow(): Promise<void> {
   runError.value = ''
   successMessage.value = ''
   runResult.value = null
-  testInput.value = ''
+  workflowInput.text = ''
+  workflowInput.user_id = null
   nodes.value = []
   edges.value = []
   try {
     workflowId.value = route.params.workflowId === 'new' ? null : Number(route.params.workflowId)
     if (workflowId.value === null) {
       workflowName.value = ''
-      rawDefinition.value = JSON.stringify({ nodes: [
+      rawDefinition.value = JSON.stringify({ start_node_id: 'start_1', return_node_id: 'return_1', nodes: [
         { id: 'start_1', name: '开始 1', type: 'start', position: { x: 80, y: 160 }, config: {} },
         { id: 'return_1', name: '返回 1', type: 'return', position: { x: 640, y: 160 }, config: {} },
       ], edges: [] })
@@ -143,8 +151,8 @@ async function loadModels(): Promise<void> {
 /** 开始和返回节点分别只能有一个；按钮、拖拽和添加入口共用此规则。 */
 function canAddNode(type: WorkflowNodeType): boolean {
   if (!canEdit.value) return false
-  if (type === 'start') return startNodeCount.value === 0
-  if (type === 'return') return returnNodeCount.value === 0
+  if (type === 'start') return startNodes.value.length === 0
+  if (type === 'return') return returnNodes.value.length === 0
   return true
 }
 
@@ -213,6 +221,8 @@ async function saveWorkflow(): Promise<number | null> {
   successMessage.value = ''
   const definition: WorkflowDefinition = {
     ...originalDefinition.value,
+    start_node_id: startNodeId.value,
+    return_node_id: returnNodeId.value,
     nodes: nodes.value.map(node => ({ ...node.data!.definition, id: node.id, position: { x: node.position.x, y: node.position.y } })),
     edges: edges.value.map(edge => ({ ...edge.data?.definition, id: edge.id, source: edge.source, target: edge.target })),
   }
@@ -241,7 +251,7 @@ async function runWorkflow(): Promise<void> {
   if (savedId === null) return
   isRunning.value = true
   try {
-    runResult.value = await runWorkflowConfig(savedId, testInput.value)
+    runResult.value = await runWorkflowConfig(savedId, workflowInput)
   } catch (error) {
     runError.value = errorMessage(error)
   } finally {
@@ -318,8 +328,10 @@ onMounted(() => { void loadWorkflow(); void loadModels() })
           </el-form>
           <template v-if="selectedDefinition.type === 'start'">
             <p class="designer-hint">接收本次输入，点击节点旁的 ▶ 运行。</p>
+            <label class="input-label" for="workflow-user-id">用户ID（可选）</label>
+            <el-input id="workflow-user-id" v-model="workflowInput.user_id" :readonly="isReadOnly" :disabled="isBusy" placeholder="后续记忆等功能使用，可不填" />
             <label class="input-label" for="workflow-test-input">测试文字</label>
-            <el-input id="workflow-test-input" v-model="testInput" type="textarea" :rows="7" :readonly="isReadOnly" :disabled="isBusy" placeholder="输入一段文字" />
+            <el-input id="workflow-test-input" v-model="workflowInput.text" type="textarea" :rows="7" :readonly="isReadOnly" :disabled="isBusy" placeholder="输入一段文字" />
             <p class="designer-hint">仅用于本次运行，不随流程保存。运行前会自动保存当前画布。</p>
             <el-button type="success" :disabled="!canRun" :loading="isRunning" @click="runWorkflow">▶ 运行</el-button>
           </template>

@@ -11,6 +11,7 @@ from app.core.errors.exceptions import BusinessError
 from app.core.response.responses import Page
 from app.infrastructure.ai.langchain.model_client import create_chat_model
 from app.infrastructure.database.transaction import transactional
+from app.modules.model_config.cache import get_model_config, invalidate_model_config
 from app.modules.model_config.entity import ModelConfig
 from app.modules.model_config.repository import ModelConfigRepository
 
@@ -25,8 +26,15 @@ class ModelConfigService:
         self.model_config_repository = ModelConfigRepository(db_session)
 
     # ---------- 新增模型配置
-    @transactional
     def create(self, request_data: dict[str, Any]) -> ModelConfig:
+        """先完成写入事务，再清除对应缓存；失败时不会执行清除。"""
+        model_config = self.create_in_transaction(request_data)
+        invalidate_model_config(model_config.id)
+        return model_config
+
+    # ---------- 在事务中新增模型配置
+    @transactional
+    def create_in_transaction(self, request_data: dict[str, Any]) -> ModelConfig:
         """request_data 为原始 JSON 对象，直接创建实体；表字段和数据库约束仍生效。"""
         model_config = ModelConfig(**request_data)
         self.model_config_repository.save(model_config)
@@ -51,8 +59,18 @@ class ModelConfigService:
         return self.require_model_config(model_id)
 
     # ---------- 修改模型配置
-    @transactional
     def update(self, model_id: int, request_data: dict[str, Any]) -> ModelConfig:
+        """事务提交成功后使缓存失效，下次调用再读取已提交的新配置。"""
+        model_config = self.update_in_transaction(model_id, request_data)
+        invalidate_model_config(model_id)
+        # 原始 JSON 允许修改主键；若确实改了ID，两边的缓存都清除。
+        if model_config.id != model_id:
+            invalidate_model_config(model_config.id)
+        return model_config
+
+    # ---------- 在事务中修改模型配置
+    @transactional
+    def update_in_transaction(self, model_id: int, request_data: dict[str, Any]) -> ModelConfig:
         """提交哪些字段就更新哪些字段；未提交的字段保留，不转换空串或自动去空格。"""
         model_config = self.require_model_config(model_id)
 
@@ -66,8 +84,14 @@ class ModelConfigService:
         return model_config
 
     # ---------- 删除模型配置
-    @transactional
     def delete(self, model_id: int) -> None:
+        """先提交删除，再使缓存失效，避免读取已删除的配置。"""
+        self.delete_in_transaction(model_id)
+        invalidate_model_config(model_id)
+
+    # ---------- 在事务中删除模型配置
+    @transactional
+    def delete_in_transaction(self, model_id: int) -> None:
         """按配置表主键删除实体。"""
         self.model_config_repository.delete(self.require_model_config(model_id))
 
@@ -75,9 +99,10 @@ class ModelConfigService:
 
     # ---------- 测试模型连接
     def test_connection(self, model_id: int) -> dict[str, int]:
-        """读取含 Key 的实体进行真实调用；事务结束后直接把实体传给模型客户端。"""
-        with self.db_session.begin():
-            model_config = self.require_model_config(model_id, include_api_key=True)
+        """通过统一缓存读取完整实体，查询会话关闭后再发起真实模型调用。"""
+        model_config = get_model_config(model_id)
+        if model_config is None:
+            raise BusinessError("模型配置不存在", HTTPStatus.NOT_FOUND)
         call_started_at = perf_counter()
 
         logger.info("请求ID=%s 操作=测试模型连接开始 模型ID=%s", request_id_context.get(), model_id)

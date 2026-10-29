@@ -24,6 +24,10 @@ export interface WorkflowEdgeDefinition {
 }
 
 export interface WorkflowDefinition {
+  /** 唯一开始节点ID；未完成的草稿可以没有开始节点。 */
+  start_node_id: string | null
+  /** 唯一返回节点ID；未完成的草稿可以没有返回节点。 */
+  return_node_id: string | null
   nodes: WorkflowNodeDefinition[]
   edges: WorkflowEdgeDefinition[]
   [key: string]: unknown

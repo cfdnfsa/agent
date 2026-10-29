@@ -19,7 +19,7 @@ uv run python -m uvicorn main:app --reload
 
 模型接口、请求示例、分页、Key 修改规则和真实模型测试见 [模型配置包文档](app/modules/model_config/README.md)。保存配置后可通过 `POST /api/model-configs/{id}/test` 验证文本调用，通过 `POST /api/playground/chat` 进行无上下文的单轮问答。
 
-数据库连接、ORM 公共能力放在 `app/infrastructure/database`，模型业务放在 `app/modules/model_config`。增删改查使用 SQLAlchemy ORM；Service 写操作通过数据库公共包的 `@transactional` 统一提交或回滚，模型调用保留查询阶段的局部事务。按当前要求未添加测试脚本。
+数据库连接、ORM 公共能力放在 `app/infrastructure/database`，模型业务放在 `app/modules/model_config`。增删改查使用 SQLAlchemy ORM；Service 写操作通过数据库公共包的 `@transactional` 统一提交或回滚。模型配置通过统一进程内缓存读取，未命中才用短会话查询，调用模型前已关闭查询会话；配置写入提交成功后清除对应缓存。按当前要求未添加测试脚本。
 
 ## 流程配置
 
@@ -31,13 +31,13 @@ uv run python -m uvicorn main:app --reload
 
 ## 流程运行
 
-`app/modules/workflow_runtime` 独立负责执行，配置管理留在 workflow_config。接口为 `POST /api/workflow-configs/{id}/run`，请求体 `{"payload":"你好"}`，返回 `{"payload":"模型回答"}`。提供开始、大模型、收敛、返回节点，全部末端自动结束，接口只返回返回节点的数据。
+`app/modules/workflow_runtime` 独立负责执行，配置管理留在 workflow_config。接口为 `POST /api/workflow-configs/{id}/run`，请求体 `{"text":"你好","user_id":"user_001"}`，user_id 可省略或为 null。FastAPI 直接解析为 WorkflowInput，内部通过 .text、.user_id 访问；开始节点仅输出文字，用户ID暂时保留在状态中。返回 `{"payload":"模型回答"}`，payload 也可以是对象或列表。提供开始、大模型、收敛、返回节点，全部末端自动结束，接口只返回返回节点的数据。
 
-每个流程运行前确认恰好有一个开始和一个返回节点；返回节点必须接收一个上游且没有下游，不符合时返回公共业务错误。引擎接收单个 start_node_id，业务末端仍可有多个。其他分支独立结束但结果不混入响应，当前仍同步等待全部分支；后台任务和队列后续再做。
+流程定义直接保存 start_node_id、return_node_id，由前端随节点增删维护；草稿缺少对应节点时为 null，运行时必须有值。后端整理上游时确认恰好有一个开始和一个返回节点且与指定ID一致，返回节点必须接收一个上游且没有下游，不符合时返回公共业务错误，不再单独查找这两个节点。引擎接收单个 start_node_id，业务末端仍可有多个。其他分支独立结束但结果不混入响应，当前仍同步等待全部分支；后台任务和队列后续再做。
 
-config_loader.py 统一查询流程、解析定义、读取模型并结束事务，Service 组织执行；executor 准备节点、入口末端和返回策略，框架构建与执行交给 [ai/langgraph/engine.py](app/infrastructure/ai/langgraph/engine.py)。同级 [workflow_nodes](app/modules/workflow_nodes/README.md) 包的 base 子包维护 BaseNode 和共用数据，node 子包维护 StartNode、LlmNode、MergeNode、ReturnNode，外层 factory.py 按配置创建节点。公共 run 读取输入、调用 execute、记录日志并提交输出；LangGraph 负责调度和等待全部上游，收敛节点按上游ID收集结果，返回节点原样传递一个上游的数据。大模型接收一个上游，对象转为 JSON 文字后调用模型。阅读节点逻辑时先看 workflow_nodes/base/base_node.py，再看 node 下的具体实现。
+config_loader.py 查询流程文本、结束事务，再解析并直接返回 WorkflowDefinition，Service 组织执行；executor 准备节点、入口末端和返回策略，框架构建与执行交给 [ai/langgraph/engine.py](app/infrastructure/ai/langgraph/engine.py)。同级 [workflow_nodes](app/modules/workflow_nodes/README.md) 包的 base 子包维护 BaseNode 和共用数据，node 子包维护 StartNode、LlmNode、MergeNode、ReturnNode，外层 factory.py 按配置创建节点，通过模型配置缓存取得大模型实体。公共 run 读取输入、调用 execute、记录日志并提交输出；LangGraph 负责调度和等待全部上游，收敛节点按上游ID收集结果，返回节点原样传递一个上游的数据。大模型接收一个上游，对象转为 JSON 文字后调用模型。阅读节点逻辑时先看 workflow_nodes/base/base_node.py，再看 node 下的具体实现。
 
-节点定义、输入和状态集中在 [workflow_nodes/base/data/](app/modules/workflow_nodes/base/data/README.md)，流程连线、流程定义、运行配置和最终结果在 [workflow_runtime/data/](app/modules/workflow_runtime/data/README.md)，每个对象一个文件；运行包依赖节点包，节点包不反向依赖。例如 runtime_config.workflow.nodes、node.config.model_config_id、result.payload，均有类型和中文 Attributes 文档；数据库和 JSON 存储字段不变。当前支持固定并行分支收敛，条件分支、循环和记忆后续再做。
+节点定义、输入和状态集中在 [workflow_nodes/base/data/](app/modules/workflow_nodes/base/data/README.md)，流程连线、流程定义和最终结果在 [workflow_runtime/data/](app/modules/workflow_runtime/data/README.md)，每个对象一个文件；运行包依赖节点包，节点包不反向依赖。例如 workflow_definition.nodes、node.config.model_config_id、result.payload，均有类型和中文 Attributes 文档；数据库和 JSON 存储字段不变。当前支持固定并行分支收敛，条件分支、循环和记忆后续再做。
 
 AI 框架接入集中在 [infrastructure/ai](app/infrastructure/ai/README.md)：langgraph 负责流程图构建和执行，langchain/model_client.py 负责模型创建，模型测试、调试台和大模型节点复用同一个入口。MCP、Skills、提示词、工具等实际接入时再建目录，对应的配置管理仍放 modules。
 

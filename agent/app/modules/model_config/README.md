@@ -8,10 +8,28 @@
 |---|---|
 | router.py | 接收 JSON，注入 Service，包装统一 Result |
 | service.py | 直接使用实体完成增删改查和模型测试，写操作通过 @transactional 控制事务 |
+| cache.py | 内部模型调用的统一配置读取入口，内存命中直接返回，未命中用短会话查库 |
 | repository.py | SQLAlchemy 查询、保存和删除 |
 | entity.py | 表结构、has_api_key 计算值、统一排除 Key 的 to_dict |
 
-get_by_id 使用 Session.get 按主键查询，返回 ModelConfig 实体或 None；list_by_ids 供流程运行前批量加载所需模型，含 Key 的完整实体仅用于内部执行。部分 PyCharm 版本会将结果误判为模型类，因此在返回处用 typing.cast 明确类型；它不转换对象、不校验字段，也不改变查询行为。
+get_by_id 使用 Session.get 按主键查询，返回 ModelConfig 实体或 None。部分 PyCharm 版本会将结果误判为模型类，因此在返回处用 typing.cast 明确类型；它不转换对象、不校验字段，也不改变查询行为。
+
+## 模型配置缓存
+
+cache.py 的 get_model_config(model_id) 供流程节点创建、模型测试和调试台共用。Map 的 key 是模型配置ID，value 是完整 ModelConfig 实体；未命中时新建短会话，以 include_api_key=True 查询，退出事务并关闭会话后才缓存实体。不缓存 Session，也不缓存 None，配置不存在时由调用方沿用现有业务错误。
+
+```mermaid
+flowchart LR
+    A["按模型ID读取"] --> B{"内存有配置？"}
+    B -- 有 --> C["直接返回实体"]
+    B -- 没有 --> D["短会话查询数据库"]
+    D -- 找到 --> E["关闭会话、写入缓存、返回实体"]
+    D -- 没找到 --> F["返回 None，不缓存空值"]
+```
+
+缓存仅供内部只读使用，普通配置列表和详情仍查询数据库且不读取 Key。线程锁保护未命中加载与缓存失效，避免同时加载同一配置或把已失效旧值重新填回；不记录实体、地址或 Key，只在 DEBUG 日志记录模型ID和命中情况。
+
+新增、修改、删除的事务提交成功后调用 invalidate_model_config(model_id)，下次使用重新查库；提交失败不清除缓存。缓存是每个进程一份的字典，重启后清空；直接在数据库中改配置不会主动刷新，多进程之间也不自动同步。
 
 公共 Base 只提供 id；模型配置不维护 created_at、updated_at。旧表执行 sql/remove_model_config_time_columns.sql 删除这两列；初始化脚本已经是去掉时间字段的最终结构，前端也不再展示更新时间。
 
@@ -50,13 +68,13 @@ get_by_id 使用 Session.get 按主键查询，返回 ModelConfig 实体或 None
 
 ## 写操作事务
 
-create、update、delete 使用数据库公共包的 `@transactional`，不再重复写 `with self.db_session.begin()`。装饰器和 Repository 复用当前 Service 的 `db_session`，方法正常结束提交，异常回滚并交给公共异常处理。业务方法内日志表示执行动作，装饰器在提交成功后单独记录事务日志。
+create、update、delete 是外层业务入口，调用各自的 create_in_transaction、update_in_transaction、delete_in_transaction。事务内方法使用公共 `@transactional`，与 Repository 复用当前请求的 db_session；返回外层方法时事务已经提交，外层再清除缓存。这样无需引入事务回调，提交失败也不会提前清除缓存。业务方法内日志表示执行动作，装饰器在提交成功后记录事务日志。
 
-列表、详情不加装饰器；模型测试仍保留查询阶段的局部事务。当前不支持已开启事务或装饰器之间的嵌套调用。
+列表、详情不加装饰器；模型测试通过缓存入口按需查询，不开启请求会话的事务。当前不支持已开启事务或装饰器之间的嵌套调用。
 
 ## 模型测试
 
-Service 在只读事务中查询完整实体，结束事务归还连接后，通过 [ai/langchain/model_client.py](../../infrastructure/ai/langchain/model_client.py) 中的 create_chat_model(model_config) 创建模型，再直接调用 model.invoke("Reply with OK only.")。会话使用 expire_on_commit=False，已加载字段仍可读取，不需要拆成多个参数或一直占用数据库连接。
+Service 通过 get_model_config 取得完整实体，缓存未命中时查询会话会先提交并关闭，再通过 [ai/langchain/model_client.py](../../infrastructure/ai/langchain/model_client.py) 中的 create_chat_model(model_config) 创建模型，直接调用 model.invoke("Reply with OK only.")。会话使用 expire_on_commit=False，已加载字段仍可读取，不需要拆成多个参数或一直占用数据库连接。
 
 成功返回 data={"elapsed_ms":123}，不保存测试历史，不返回模型原始回复。SDK 调用失败沿用公共异常处理，返回 HTTP 500 和“服务器内部错误”，暂不区分各家的模型错误；测试为真实请求，可能产生费用。
 

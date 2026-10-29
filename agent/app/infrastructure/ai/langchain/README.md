@@ -12,7 +12,7 @@
 | create_ollama_model(model_config) | 创建 Ollama 模型 |
 | create_google_genai_model(model_config) | 创建 Google Gemini 模型 |
 
-model_config 直接使用数据库查询出的 ModelConfig 实体，包含 Key，不拆开传递连接参数。读取后结束事务，expire_on_commit=False 保留已加载字段。
+model_config 直接使用 ModelConfig 实体，包含 Key，不拆开传递连接参数。流程节点创建、模型测试和调试台通过 [模型配置缓存](../../../modules/model_config/README.md#模型配置缓存) 取得实体，未命中时的查询会话在调用模型前已关闭，expire_on_commit=False 保留已加载字段。本包不读取缓存或查询数据库，只使用传入的实体。
 
 Service 中的问答调用：
 

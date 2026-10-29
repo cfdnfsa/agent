@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.app_logging import logger, request_id_context
 from app.modules.workflow_nodes.base.data.workflow_input import WorkflowInput
-from app.modules.workflow_runtime.config_loader import load_runtime_config
+from app.modules.workflow_runtime.config_loader import load_workflow_definition
 from app.modules.workflow_runtime.data.workflow_result import WorkflowResult
 from app.modules.workflow_runtime.executor import run_workflow
 
@@ -16,7 +16,7 @@ class WorkflowRuntimeService:
 
     # ---------- 初始化流程运行服务
     def __init__(self, db_session: Session):
-        """db_session 来自当前请求，仅交给加载器读取运行配置。"""
+        """db_session 来自当前请求，仅交给加载器读取流程定义。"""
         self.db_session = db_session
 
     # ---------- 运行已保存的流程
@@ -25,18 +25,18 @@ class WorkflowRuntimeService:
 
         Args:
             workflow_id: 已保存流程的主键。
-            workflow_input: 本次输入对象，通过 .payload 查看实际业务数据。
+            workflow_input: 本次输入对象，.text 是用户文字，.user_id 是预留用户ID。
 
         Returns:
             最终业务数据；异常继续交给公共异常处理。
         """
-        runtime_config = load_runtime_config(self.db_session, workflow_id)
+        workflow_definition = load_workflow_definition(self.db_session, workflow_id)
         started_at = perf_counter()
 
         logger.info("请求ID=%s 操作=运行流程开始 流程ID=%s", request_id_context.get(), workflow_id)
 
         try:
-            result = run_workflow(runtime_config, workflow_input)
+            result = run_workflow(workflow_definition, workflow_input)
         except Exception:
 
             logger.error("请求ID=%s 操作=运行流程失败 流程ID=%s", request_id_context.get(), workflow_id, exc_info=True)

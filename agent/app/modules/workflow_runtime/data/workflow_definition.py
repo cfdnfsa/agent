@@ -15,6 +15,8 @@ class WorkflowDefinition:
     创建当前对象以及其中的节点、连线对象。
 
     Attributes:
+        start_node_id: 唯一开始节点ID；草稿未添加开始节点时为 None，运行时必须有值。
+        return_node_id: 唯一返回节点ID；草稿未添加返回节点时为 None，运行时必须有值。
         nodes: 节点列表，每个节点包含 id、type、config，可用 name 指定显示名称。
         edges: 连线列表，source 为起点ID，target 为终点ID，执行顺序由连线决定。
 
@@ -22,6 +24,8 @@ class WorkflowDefinition:
         最小流程“开始 → 返回”对应的 JSON 文本：
 
         {
+            "start_node_id": "start_1",
+            "return_node_id": "return_1",
             "nodes": [
                 {"id": "start_1", "type": "start", "config": {}},
                 {"id": "return_1", "type": "return", "config": {}}
@@ -35,5 +39,7 @@ class WorkflowDefinition:
     这些信息保留在数据库原始 JSON 中。本次测试输入和运行结果不属于流程定义。
     """
 
+    start_node_id: str | None
+    return_node_id: str | None
     nodes: list[WorkflowNode]
     edges: list[WorkflowEdge]
