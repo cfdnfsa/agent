@@ -3,11 +3,12 @@
 from dataclasses import Field, dataclass, field
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar
 
+from app.modules.workflow_nodes.base.data.node_output import NodeOutput
 from app.modules.workflow_nodes.base.data.workflow_input import WorkflowInput
 
 
 # ---------- 合并各节点独立产生的输出
-def merge_node_outputs(current: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
+def merge_node_outputs(current: dict[str, NodeOutput], updates: dict[str, NodeOutput]) -> dict[str, NodeOutput]:
     """按节点ID合并本次更新，避免同一步执行的分支相互覆盖。
 
     这是图状态的存储规则；收敛节点另行收集上游数据，等待由 LangGraph 连线负责。
@@ -25,7 +26,8 @@ class WorkflowState:
 
     Attributes:
         inputs: 本次运行输入，通过 inputs.text 读取文字、inputs.user_id 读取预留用户ID。
-        node_outputs: 按节点ID索引的输出，值允许文字、对象或列表。
+        node_outputs: 按节点ID保存全部已执行的 NodeOutput，value 为本节点结果。
+            节点按 input_scope 读取自己的上游结果，不直接使用整个 Map。
     """
 
     if TYPE_CHECKING:
@@ -36,4 +38,4 @@ class WorkflowState:
     inputs: WorkflowInput
 
     # Annotated 告诉 LangGraph：并行更新此字段时，调用上面的合并函数。
-    node_outputs: Annotated[dict[str, Any],merge_node_outputs] = field(default_factory=dict)
+    node_outputs: Annotated[dict[str, NodeOutput], merge_node_outputs] = field(default_factory=dict)

@@ -26,7 +26,7 @@ invoke 由框架提供，text 取得回复中的文本。问题原样传入，�
 
 流程 LLM 节点先通过公共文字函数转换已经选好的上下文，再调用 build_chat_prompt。公共模板只包含“以下是本次流程传入的数据：”和 context 变量，由 ChatPromptTemplate.format_prompt 自动填充并生成 ChatPromptValue，可直接交给 model.invoke。节点选中的提示词正文直接创建 SystemMessage，不作为模板解析，JSON 花括号、空白和换行原样保留；未选提示词时只有用户消息。框架用法见 [ChatPromptTemplate](https://reference.langchain.com/python/langchain-core/prompts/chat/ChatPromptTemplate)。
 
-累计或仅当前结果的传递规则位于节点公共层。本包只接收准备好的文字，不读取 WorkflowState，也不加载配置实体。流程节点的完整模型回复留在内部 LlmNodeOutput.message 中，默认业务结果仍是正文。
+输入范围由运行模块和节点公共层决定。本包只接收准备好的文字，不读取 WorkflowState，也不加载配置实体。流程节点的完整模型回复留在内部 LlmNodeOutput.message 中，默认业务结果仍是正文。
 
 ## 依赖与地址
 

@@ -1,10 +1,13 @@
 /** 通用节点目录与流程结构；节点能力由代码维护，不新增工具箱表。 */
 export type WorkflowNodeType = 'start' | 'llm' | 'merge' | 'return'
+export type InputScope = 'all_upstream' | 'direct_upstream'
 
 export interface WorkflowNodeConfig {
   model_config_id?: number | null
   /** 可选提示词配置ID，正文由后端运行时读取。 */
   prompt_config_id?: number | null
+  /** 当前节点读取全部上游（默认），或只读取直接上游的结果。 */
+  input_scope?: InputScope
   [key: string]: unknown
 }
 

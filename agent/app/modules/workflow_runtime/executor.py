@@ -3,11 +3,10 @@
 读取已保存的入口和返回ID → 整理关系并创建节点 → 找出全部业务末端 → 执行图 → 取出返回节点数据
 """
 
-from typing import Any
-
 from app.core.errors.exceptions import BusinessError
 from app.infrastructure.ai.langgraph.engine import run_graph
 from app.modules.workflow_nodes.base.base_node import BaseNode
+from app.modules.workflow_nodes.base.data.node_output import NodeOutput
 from app.modules.workflow_nodes.base.data.workflow_input import WorkflowInput
 from app.modules.workflow_nodes.base.data.workflow_state import WorkflowState
 from app.modules.workflow_nodes.factory import create_node
@@ -96,11 +95,39 @@ def create_runtime_nodes(workflow_definition: WorkflowDefinition) -> list[BaseNo
     # 结构确认后再创建对象，避免无效流程提前加载模型配置。
     runtime_nodes: list[BaseNode] = []
     for definition in node_definitions:
-        runtime_nodes.append(
-            create_node(definition, incoming[definition.id])
-        )
+        runtime_node = create_node(definition, incoming[definition.id])
+        # 输入范围属于使用数据的节点，上游节点不会限制其他节点读取已保存的结果。
+        if definition.type in ("llm", "merge") and definition.config.input_scope != "direct_upstream":
+            runtime_node.input_ids = find_upstream_node_ids(definition.id, incoming)
+        runtime_nodes.append(runtime_node)
 
     return runtime_nodes
+
+
+# ---------- 找出当前节点的全部直接和间接上游
+def find_upstream_node_ids(node_id: str, incoming: dict[str, list[str]]) -> list[str]:
+    """准备节点时沿入边查找依赖，运行中只按得到的ID读取结果。
+
+    Args:
+        node_id: 当前节点ID，自身不加入输入范围。
+        incoming: 全部节点的直接上游关系，由已保存的连线整理得到。
+
+    Returns:
+        去重后的上游ID，不包含无关分支；列表顺序不表示执行顺序。
+    """
+    upstream_ids: list[str] = []
+    # 从直接上游往前找；先标记当前节点，保证输入列表不包含自身。
+    pending_ids = incoming[node_id].copy()
+    visited_ids = {node_id}
+    while pending_ids:
+        upstream_id = pending_ids.pop()
+        if upstream_id in visited_ids:
+            continue
+        visited_ids.add(upstream_id)
+        upstream_ids.append(upstream_id)
+        # 继续检查这个上游的父节点，遇到共同祖先时由 visited_ids 去重。
+        pending_ids.extend(incoming[upstream_id])
+    return upstream_ids
 
 
 # ---------- 查找没有下游的末端节点
@@ -126,7 +153,7 @@ def find_terminal_node_ids(workflow_definition: WorkflowDefinition) -> list[str]
 
 
 # ---------- 读取返回节点输出并包装运行结果
-def build_workflow_result(node_outputs: dict[str, Any], return_node_id: str) -> WorkflowResult:
+def build_workflow_result(node_outputs: dict[str, NodeOutput], return_node_id: str) -> WorkflowResult:
     """从全部节点输出中，只读取本次选定的返回节点。
 
     Args:
@@ -138,4 +165,4 @@ def build_workflow_result(node_outputs: dict[str, Any], return_node_id: str) -> 
     """
     if return_node_id not in node_outputs:
         raise BusinessError("返回节点未执行，请检查流程连线")
-    return WorkflowResult(payload=node_outputs[return_node_id])
+    return WorkflowResult(payload=node_outputs[return_node_id].value)

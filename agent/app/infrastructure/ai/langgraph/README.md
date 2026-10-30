@@ -6,7 +6,7 @@ engine.py 集中使用 StateGraph、START、END、add_node、add_edge、compile�
 
 `run_graph(nodes, start_node_id, terminal_node_ids, initial_state)` 接收已准备好的节点对象、唯一入口ID、末端ID列表和本次状态。业务层运行前确认恰好有一个开始节点，入口使用 str，末端仍可有多个。节点对象已经带有 source_ids，不再重复转换节点配置。
 
-执行过程：注册 node.run → 连接入口、节点依赖和末端 → compile → invoke。上游列表形式的 add_edge 等待全部指定上游，支持当前固定并行分支收敛。invoke 等待本次图运行完成，再返回 dict[str, NodeOutput]。每项的 value 是当前结果、context 是节点公共层准备的下游数据，传递规则不在图引擎内处理。
+执行过程：注册 node.run → 连接入口、节点依赖和末端 → compile → invoke。上游列表形式的 add_edge 等待全部指定上游，支持当前固定并行分支收敛。invoke 等待本次图运行完成，再返回 dict[str, NodeOutput]，每项的 value 是该节点结果。输入范围由运行模块提前确定、公共节点层按ID读取，不在图引擎内筛选。
 
 engine.py 按步骤拆成普通函数，仍使用同一个图对象：
 

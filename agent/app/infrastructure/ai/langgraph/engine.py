@@ -9,11 +9,10 @@ register_nodes 登记执行方法 → connect_edges 建立依赖 → execute_gra
 run_workflow 从所有节点输出中选择接口返回的数据
 """
 
-from typing import Any
-
 from langgraph.graph import END, START, StateGraph
 
 from app.modules.workflow_nodes.base.base_node import BaseNode
+from app.modules.workflow_nodes.base.data.node_output import NodeOutput
 from app.modules.workflow_nodes.base.data.workflow_state import WorkflowState
 
 
@@ -23,7 +22,7 @@ def run_graph(
         start_node_id: str,
         terminal_node_ids: list[str],
         initial_state: WorkflowState,
-) -> dict[str, Any]:
+) -> dict[str, NodeOutput]:
     """接收已准备的节点对象和状态，返回各节点的输出。
 
     Args:
@@ -89,7 +88,7 @@ def connect_edges(
 
 
 # ---------- 编译并执行已经连好的图
-def execute_graph(graph: StateGraph[WorkflowState], initial_state: WorkflowState) -> dict[str, Any]:
+def execute_graph(graph: StateGraph[WorkflowState], initial_state: WorkflowState) -> dict[str, NodeOutput]:
     """把构建好的图准备为可执行对象，再使用本次输入运行。
 
     Args:

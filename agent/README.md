@@ -41,7 +41,7 @@ uv run python -m uvicorn main:app --reload
 
 流程定义直接保存 start_node_id、return_node_id，由前端随节点增删维护；草稿缺少对应节点时为 null，运行时必须有值。后端整理上游时确认恰好有一个开始和一个返回节点且与指定ID一致，返回节点必须接收一个上游且没有下游，不符合时返回公共业务错误，不再单独查找这两个节点。引擎接收单个 start_node_id，业务末端仍可有多个。其他分支独立结束但结果不混入响应，当前仍同步等待全部分支；后台任务和队列后续再做。
 
-config_loader.py 查询流程文本、结束事务，再解析并直接返回 WorkflowDefinition，Service 组织执行；executor 准备节点、入口末端和返回策略，框架构建与执行交给 [ai/langgraph/engine.py](app/infrastructure/ai/langgraph/engine.py)。同级 [workflow_nodes](app/modules/workflow_nodes/README.md) 包维护节点，factory.py 通过缓存准备配置资源。公共 run 读取 NodeContext、调用 execute、记录日志并提交 NodeOutput；默认 accumulate 累计传递，result_only 只传当前结果，沿实际连线确定范围。收敛合并上游上下文并按ID去重，返回节点只取上游 value。公共文字转换在 base/text.py，框架消息模板在 ai/langchain/prompt_builder.py，LLM 内部保留完整模型消息，默认业务结果仍是正文。阅读时先看 base/base_node.py，再看具体节点。
+config_loader.py 查询流程文本、结束事务，再解析并直接返回 WorkflowDefinition，Service 组织执行；executor 准备节点、入口末端和返回策略，框架构建与执行交给 [ai/langgraph/engine.py](app/infrastructure/ai/langgraph/engine.py)。同级 [workflow_nodes](app/modules/workflow_nodes/README.md) 包维护节点，factory.py 通过缓存准备配置资源。WorkflowState 统一保存 NodeOutput，节点按 input_scope 读取所需结果：默认 all_upstream 读取全部上游，direct_upstream 只读直接上游。executor 提前准备 input_ids，公共 run 按ID取得 NodeContext，再调用 execute、记录日志并保存当前结果。每个节点独立选择，不裁剪其他节点的数据；返回节点只取直接上游 value。公共文字转换在 base/text.py，框架消息模板在 ai/langchain/prompt_builder.py，LLM 内部保留完整回复，默认业务结果为正文。阅读时先看 base/base_node.py，再看具体节点。
 
 节点定义、输入和状态集中在 [workflow_nodes/base/data/](app/modules/workflow_nodes/base/data/README.md)，流程连线、流程定义和最终结果在 [workflow_runtime/data/](app/modules/workflow_runtime/data/README.md)，每个对象一个文件；运行包依赖节点包，节点包不反向依赖。例如 workflow_definition.nodes、node.config.model_config_id、result.payload，均有类型和中文 Attributes 文档；数据库和 JSON 存储字段不变。当前支持固定并行分支收敛，条件分支、循环和记忆后续再做。
 

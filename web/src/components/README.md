@@ -16,7 +16,7 @@
 
 节点卡片优先显示 definition.name，未填时显示类型名称。长名称省略展示，悬停查看完整文字；ID 保留在下方，不随改名变化。
 
-`workflowNodes.ts` 维护当前开始、大模型、收敛、返回四种节点和流程结构类型，工具箱目录由代码维护，不新增数据库表。LLM、收敛可配置 data_transfer_mode，默认 accumulate（累计传递），也可选 result_only（仅当前结果）；开始和返回无需该选项。返回类型为 return，唯一性与不能连接下游的规则由页面和后端运行模块共同维护。
+`workflowNodes.ts` 维护当前开始、大模型、收敛、返回四种节点和流程结构类型，工具箱目录由代码维护，不新增数据库表。LLM、收敛可配置 input_scope，默认 all_upstream（全部上游数据），也可选 direct_upstream（直接上游结果）；开始和返回无需该选项。返回类型为 return，唯一性与不能连接下游的规则由页面和后端运行模块共同维护。
 
 WorkflowDefinition 顶层包含 start_node_id、return_node_id、nodes、edges，两个ID由画布页自动维护；未添加对应节点的草稿使用 null，运行时必须指向实际的开始和返回节点。
 

@@ -3,7 +3,7 @@
   "return_node_id": "return_1",
   "nodes": [
     {"id": "start_1", "name": "用户输入", "type": "start", "position": {"x": 100, "y": 160}, "config": {}},
-    {"id": "llm_1", "name": "生成回答", "type": "llm", "position": {"x": 400, "y": 160}, "config": {"model_config_id": 1}},
+    {"id": "llm_1", "name": "生成回答", "type": "llm", "position": {"x": 400, "y": 160}, "config": {"model_config_id": 1, "input_scope": "all_upstream"}},
     {"id": "return_1", "name": "返回回答", "type": "return", "position": {"x": 700, "y": 160}, "config": {}}
   ],
   "edges": [

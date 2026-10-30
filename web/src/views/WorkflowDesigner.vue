@@ -7,7 +7,7 @@ import '@vue-flow/core/dist/theme-default.css'
 import WorkflowCanvasNode from '../components/WorkflowCanvasNode.vue'
 import {
   workflowNodeLabel, workflowNodeTypes,
-  type WorkflowCanvasEdgeData, type WorkflowCanvasNodeData, type WorkflowDefinition, type WorkflowNodeConfig, type WorkflowNodeType,
+  type InputScope, type WorkflowCanvasEdgeData, type WorkflowCanvasNodeData, type WorkflowDefinition, type WorkflowNodeConfig, type WorkflowNodeType,
 } from '../components/workflowNodes'
 import { getWorkflowConfig, runWorkflowConfig, saveWorkflowConfig, type WorkflowInput, type WorkflowResult } from '../api/workflowConfigs'
 import { listModelConfigs, type ModelConfig } from '../api/modelConfigs'
@@ -54,6 +54,17 @@ const startNodeId = computed(() => startNodes.value[0]?.id ?? null)
 const returnNodeId = computed(() => returnNodes.value[0]?.id ?? null)
 const canRun = computed(() => canEdit.value && startNodes.value.length === 1 && returnNodes.value.length === 1)
 const selectedDefinition = computed(() => nodes.value.find(node => node.id === selectedNodeId.value)?.data?.definition ?? null)
+// 未填写时默认读取全部上游；只有用户选择后才更新该节点的配置。
+const selectedInputScope = computed<InputScope>({
+  get() {
+    return selectedDefinition.value?.config.input_scope ?? 'all_upstream'
+  },
+  set(scope) {
+    if (selectedDefinition.value) {
+      selectedDefinition.value.config.input_scope = scope
+    }
+  },
+})
 const hasSelection = computed(() => selectedDefinition.value !== null || edges.value.some(edge => edge.id === selectedEdgeId.value))
 
 /** 错误显示在当前页，配置输入保持原值。 */
@@ -189,6 +200,9 @@ function addNode(type: WorkflowNodeType, position?: XYPosition): void {
   while (nodes.value.some(node => node.id === `${type}_${index}`)) index++
   const id = `${type}_${index}`
   const config: WorkflowNodeConfig = {}
+  if (type === 'llm' || type === 'merge') {
+    config.input_scope = 'all_upstream'
+  }
   if (type === 'llm') {
     config.model_config_id = modelOptions.value[0]?.id ?? null
     config.prompt_config_id = null
@@ -373,7 +387,7 @@ onMounted(() => { void loadWorkflow(); void loadModels(); void loadPrompts() })
                 </el-select>
               </el-form-item>
               <el-form-item label="提示词（可选）">
-                <el-select v-model="selectedDefinition.config.prompt_config_id" filterable clearable :loading="isLoadingPrompts" placeholder="不选择则直接使用上游输入">
+                <el-select v-model="selectedDefinition.config.prompt_config_id" filterable clearable :loading="isLoadingPrompts" placeholder="不选择则仅使用上游上下文">
                   <el-option v-for="prompt in promptOptions" :key="prompt.id" :label="`${prompt.prompt_name}（ID：${prompt.id}）`" :value="prompt.id" />
                 </el-select>
               </el-form-item>
@@ -381,11 +395,20 @@ onMounted(() => { void loadWorkflow(); void loadModels(); void loadPrompts() })
             <el-alert v-if="modelError" :title="modelError" type="error" :closable="false"><el-button link type="primary" :disabled="isLoadingModels" @click="loadModels">重新加载模型</el-button></el-alert>
             <el-alert v-if="promptError" :title="promptError" type="error" :closable="false"><el-button link type="primary" :disabled="isLoadingPrompts" @click="loadPrompts">重新加载提示词</el-button></el-alert>
             <p class="designer-hint">提示词作为当前模型的任务说明，正文在运行时读取；可清除选择。</p>
-            <p class="designer-hint">接收一个上游，文字直接交给模型，对象转为 JSON 文字。多路输入请先连接收敛节点。</p>
+            <p class="designer-hint">可直接连接多个上游，等待全部完成后按输入范围读取结果，由公共消息模板填入数据。</p>
           </template>
-          <p v-else-if="selectedDefinition.type === 'merge'" class="designer-hint">将多个上游连到左侧圆点，等待全部完成后，按节点 ID 收集结果并传给下游，无需额外配置。</p>
-          <p v-else-if="selectedDefinition.type === 'return'" class="designer-hint">把一个上游的数据原样返回给调用方，无需额外配置。此节点不能连接下游；多路结果先经过收敛节点。本次运行仍会等待其他支路完成。</p>
+          <p v-else-if="selectedDefinition.type === 'merge'" class="designer-hint">将多个上游连到左侧圆点，等待全部完成后，按本节点的输入范围收集结果。</p>
+          <p v-else-if="selectedDefinition.type === 'return'" class="designer-hint">把一个上游的最终处理结果返回给调用方。此节点不能连接下游；返回多路数据时先经过收敛节点。本次运行仍会等待其他支路完成。</p>
           <p v-else class="designer-hint">当前节点配置会保留，暂未提供配置面板。</p>
+          <el-form v-if="selectedDefinition.type === 'llm' || selectedDefinition.type === 'merge'" label-position="top" :disabled="!canEdit">
+            <el-form-item label="输入范围">
+              <el-select v-model="selectedInputScope">
+                <el-option label="全部上游数据" value="all_upstream" />
+                <el-option label="直接上游结果" value="direct_upstream" />
+              </el-select>
+            </el-form-item>
+            <p class="designer-hint">全部上游包含整条依赖链的结果；直接上游只取连线指向本节点的结果。此选项只影响当前节点。</p>
+          </el-form>
         </template>
         <p v-else class="designer-hint">点击节点查看配置，选中连线后可以删除。</p>
         <div v-if="definitionError" class="definition-recovery">

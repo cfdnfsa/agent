@@ -1,13 +1,14 @@
 """大模型节点：使用已加载的模型和可选提示词调用 LangChain，不在节点中查库。"""
 
-import json
-from typing import Any
-
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.prompt_values import ChatPromptValue
 
 from app.infrastructure.ai.langchain.model_client import create_chat_model
+from app.infrastructure.ai.langchain.prompt_builder import build_chat_prompt
 from app.modules.workflow_nodes.base.base_node import BaseNode
+from app.modules.workflow_nodes.base.data.node_context import NodeContext
 from app.modules.workflow_nodes.base.data.workflow_node import WorkflowNode
+from app.modules.workflow_nodes.base.text import convert_input_to_text
+from app.modules.workflow_nodes.node.data.llm_node_output import LlmNodeOutput
 from app.modules.workflow_nodes.node.data.llm_node_resources import LlmNodeResources
 
 
@@ -30,56 +31,37 @@ class LlmNode(BaseNode):
         super().__init__(definition, source_ids)
         self.resources = resources
 
-    # ---------- 调用大模型并返回文字
-    def execute(self, node_input: Any) -> str:
-        """依次转换输入、创建模型、组装消息并调用，具体准备逻辑交给小方法。
+    # ---------- 调用大模型并保存回复
+    def execute(self, node_input: NodeContext) -> LlmNodeOutput:
+        """用公共模板准备消息，调用模型后同时保留正文和原始回复。
 
         Args:
-            node_input: 一个上游的结果，可以是文字，也可以是收敛后的对象。
+            node_input: 按当前节点 input_scope 选出的直接或全部上游结果。
 
         Returns:
-            模型回答正文；请求参数使用现有公共模型配置。
+            value 为回答正文，message 为完整模型消息，供后续工具能力使用。
         """
 
-        input_text = convert_input_to_text(node_input)
-        model_input = self.build_model_input(input_text)
+        model_input = self.build_model_input(node_input)
 
         # 创建模型对象后，invoke 才真正发送请求。
         model = create_chat_model(self.resources.model_config)
         response = model.invoke(model_input)
 
-        return str(response.text)
+        return LlmNodeOutput(value=str(response.text), message=response)
 
     # ---------- 组装交给模型的文字或消息
-    def build_model_input(self, input_text: str) -> str | list[BaseMessage]:
-        """根据是否选择提示词，决定直接传文字还是提供系统、用户两条消息。
+    def build_model_input(self, node_input: NodeContext) -> ChatPromptValue:
+        """将已选择的上游数据转成文字，再由 LangChain 模板统一组装消息。
 
         Args:
-            input_text: 已转换成文字的上游结果。
+            node_input: 当前节点实际收到的数据，不直接读取全局状态中的其他输出。
 
         Returns:
-            未选提示词时返回原文字；选中时返回框架消息列表，正文原样使用。
+            LangChain 模型输入；选择提示词时增加原文系统消息，未选择时只有用户消息。
         """
-        if self.resources.prompt_config is None:
-            return input_text
-
-        # 使用框架的消息对象区分角色：系统消息说明任务，用户消息承载上游数据。
-        return [
-            SystemMessage(content=self.resources.prompt_config.prompt_content),
-            HumanMessage(content=input_text),
-        ]
-
-
-# ---------- 将节点输入转换成模型可读的文字
-def convert_input_to_text(node_input: Any) -> str:
-    """文字原样保留，对象或列表转成 JSON 文字，保留中文以便模型阅读。
-
-    Args:
-        node_input: 一个上游的结果，可以是文字，也可以是收敛后的对象。
-
-    Returns:
-        交给模型的输入文字；JSON 无法序列化时沿用原有异常处理。
-    """
-    if isinstance(node_input, str):
-        return node_input
-    return json.dumps(node_input, ensure_ascii=False)
+        input_text = convert_input_to_text(node_input.results)
+        system_prompt = None
+        if self.resources.prompt_config is not None:
+            system_prompt = self.resources.prompt_config.prompt_content
+        return build_chat_prompt(input_text, system_prompt)
