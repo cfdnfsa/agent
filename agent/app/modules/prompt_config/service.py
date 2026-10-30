@@ -9,12 +9,13 @@ from app.core.app_logging import logger, request_id_context
 from app.core.errors.exceptions import BusinessError
 from app.core.response.responses import Page
 from app.infrastructure.database.transaction import transactional
+from app.modules.prompt_config.cache import invalidate_prompt_config
 from app.modules.prompt_config.entity import PromptConfig
 from app.modules.prompt_config.repository import PromptConfigRepository
 
 
 class PromptConfigService:
-    """Service 与 Repository 共用请求会话，写操作由公共装饰器提交或回滚。"""
+    """Service 与 Repository 共用请求会话，写入提交成功后再清除对应缓存。"""
 
     # ---------- 初始化提示词配置服务
     def __init__(self, db_session: Session):
@@ -23,8 +24,15 @@ class PromptConfigService:
         self.prompt_config_repository = PromptConfigRepository(db_session)
 
     # ---------- 新增提示词配置
-    @transactional
     def create(self, request_data: dict[str, Any]) -> PromptConfig:
+        """先完成写入事务，再清除对应缓存；写入失败时不执行清除。"""
+        prompt_config = self.create_in_transaction(request_data)
+        invalidate_prompt_config(prompt_config.id)
+        return prompt_config
+
+    # ---------- 在事务中新增提示词配置
+    @transactional
+    def create_in_transaction(self, request_data: dict[str, Any]) -> PromptConfig:
         """request_data 包含 prompt_name、prompt_content，直接创建实体，不改写正文。"""
         prompt_config = PromptConfig(**request_data)
         self.prompt_config_repository.save(prompt_config)
@@ -46,8 +54,18 @@ class PromptConfigService:
         return self.require_prompt_config(prompt_id)
 
     # ---------- 修改提示词配置
-    @transactional
     def update(self, prompt_id: int, request_data: dict[str, Any]) -> PromptConfig:
+        """提交成功后清除缓存，下次调用时再加载新的已提交内容。"""
+        prompt_config = self.update_in_transaction(prompt_id, request_data)
+        invalidate_prompt_config(prompt_id)
+        # 直接接收 JSON 允许修改主键；主键变化时，旧ID和新ID的缓存都需要清除。
+        if prompt_config.id != prompt_id:
+            invalidate_prompt_config(prompt_config.id)
+        return prompt_config
+
+    # ---------- 在事务中修改提示词配置
+    @transactional
+    def update_in_transaction(self, prompt_id: int, request_data: dict[str, Any]) -> PromptConfig:
         """按 prompt_id 查询实体，提交哪些字段就更新哪些字段，未提交字段保持原值。"""
         prompt_config = self.require_prompt_config(prompt_id)
         for field_name, field_value in request_data.items():
@@ -59,8 +77,14 @@ class PromptConfigService:
         return prompt_config
 
     # ---------- 删除提示词配置
-    @transactional
     def delete(self, prompt_id: int) -> None:
+        """先提交删除，再清除对应缓存，后续读取会确认记录是否还存在。"""
+        self.delete_in_transaction(prompt_id)
+        invalidate_prompt_config(prompt_id)
+
+    # ---------- 在事务中删除提示词配置
+    @transactional
+    def delete_in_transaction(self, prompt_id: int) -> None:
         """prompt_id 为待删除主键，按记录删除；不存在时抛出统一 404 业务异常。"""
         self.prompt_config_repository.delete(self.require_prompt_config(prompt_id))
 

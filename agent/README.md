@@ -33,7 +33,7 @@ uv run python -m uvicorn main:app --reload
 
 `app/modules/prompt_config` 提供提示词新增、分页列表、详情、修改和删除，接口前缀为 `/api/prompt-configs`。表中只有 id、prompt_name、prompt_content，名称允许重复，正文原样保存；列表只读取 ID 和名称，详情才读取正文。先执行 `sql/pgsql.sql` 中的 prompt_config 建表语句，应用启动不自动建表。
 
-写接口直接接收 JSON，提交哪些字段就更新哪些字段，复用公共事务、错误处理和返回结构。接口和示例见 [提示词配置包文档](app/modules/prompt_config/README.md)。当前完成配置管理，流程节点引用提示词后续接入。
+写接口直接接收 JSON，提交哪些字段就更新哪些字段，复用公共事务、错误处理和返回结构。内部读取已提供 get_prompt_config 按需缓存入口，未命中才用短会话查库，增删改提交成功后清除对应缓存；管理列表和详情仍直接查库。接口和缓存规则见 [提示词配置包文档](app/modules/prompt_config/README.md)。当前完成配置管理和缓存入口，流程节点引用提示词后续接入。
 
 ## 流程运行
 

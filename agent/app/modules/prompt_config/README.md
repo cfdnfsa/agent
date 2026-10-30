@@ -6,10 +6,19 @@
 |---|---|
 | entity.py | 映射 prompt_config 表的三个字段，提供 to_dict |
 | repository.py | ORM 查询、保存、删除，列表只查 ID 和名称 |
-| service.py | 配置增删改查，写入使用公共 @transactional |
+| service.py | 配置增删改查，事务提交成功后清除对应缓存 |
+| cache.py | 按ID读取完整实体，优先命中内存，未命中用短会话查库 |
 | router.py | 注入当前请求的服务，包装公共 Result、Page |
 
-调用关系：main.py 注册 router → Service → Repository。Service 和 Repository 共用当前请求的 db_session，Repository 不提交事务；@transactional 在写方法正常结束后提交，异常时回滚。
+调用关系：main.py 注册 router → Service → Repository。Service 和 Repository 共用当前请求的 db_session，Repository 不提交事务。create、update、delete 调用各自的 *_in_transaction 方法，由 @transactional 提交或回滚；成功返回后外层方法再清除缓存，失败时不提前清除。
+
+## 提示词配置缓存
+
+内部读取入口为 cache.py 的 get_prompt_config(prompt_id)，返回 PromptConfig 或 None。缓存使用 dict[int, PromptConfig]：命中直接返回完整实体，未命中自行创建短查询会话，查询事务结束并关闭会话后缓存实体；找不到返回 None，不缓存空值。Session 使用现有连接池和 expire_on_commit=False，缓存仅保存已加载的配置，供内部只读使用。
+
+加载和失效共用线程锁，避免并发查询在清除后把旧内容重新写回。新增、修改、删除提交成功后调用 invalidate_prompt_config；修改主键时同时清除旧ID和新ID。写入使用请求会话单独查询实体，不修改已交给调用方的缓存实体。DEBUG 日志只记录请求ID、提示词ID和命中情况，不记录正文。
+
+管理接口列表、详情仍直接查库，不走缓存。当前先提供缓存入口，流程节点接入提示词时再使用。缓存每个进程一份，重启清空；直接在数据库里修改提示词不会自动刷新，多进程之间也不自动同步。
 
 ## 表与接口
 

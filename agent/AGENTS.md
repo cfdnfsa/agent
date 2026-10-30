@@ -7,6 +7,7 @@
 - 流程配置保持三个字段：`id`、`workflow_name`、`workflow_definition`。定义按普通文本原样保存，不使用数据库 JSON/JSONB 类型，保存时不解析或校验流程，运行时再解析；列表只查询 ID、名称，详情才读取定义。公共 Base 仅提供 id，当前模型配置和流程配置均不维护创建时间、更新时间，不默认增加时间字段。
 - workflow_config 只负责配置增删改查；workflow_runtime 加载入口只返回 WorkflowDefinition，负责准备节点和返回策略，不再打包流程与模型 Map；同级 workflow_nodes 的 base 子包维护基类和共用数据，node 子包维护具体节点，factory.py 按类型创建节点，大模型配置从 model_config/cache.py 的统一入口按需读取。节点实现的 run、execute 和 AI 图引擎不查库，模型准备阶段的短查询会话在执行图前关闭。页面只返回最终数据；排查使用后端日志，模型配置与 Key 不输出，正文只在 DEBUG 级别记录。
 - 模型配置使用进程内 dict[int, ModelConfig] 缓存：get_model_config 命中直接返回完整实体，未命中自行开启短会话读取，关闭会话后缓存，不缓存 Session 或 None。流程节点创建、模型测试、调试台共用此入口；列表详情保持原数据库查询和 Key 排除规则。缓存实体仅内部只读，CRUD 使用独立请求会话查询实体，事务提交成功后使对应缓存失效；不增加 Redis、TTL 或重复配置 DTO。
+- 提示词配置沿用模型配置的按需缓存规则，入口为 prompt_config/cache.py 的 get_prompt_config，保存 dict[int, PromptConfig] 完整实体；命中直接返回，未命中用短会话查库，关闭会话后缓存，不缓存 Session 或 None。管理列表、详情仍直接查库；增删改提交成功后清除对应缓存，修改主键时同时清除旧ID和新ID。缓存仅供内部只读使用，流程节点接入时复用此入口。
 - AI 框架能力集中在 infrastructure/ai：langgraph/engine.py 使用 StateGraph、连线、编译和执行，接收现有 BaseNode、WorkflowState 和入口末端ID，只返回各节点输出，不查询配置或决定 HTTP 返回；langchain/model_client.py 创建模型，供模型测试、调试台和大模型节点复用。图引擎只依赖节点 base 契约，不引用运行 Service、Repository 或 HTTP；不增加重复节点 DTO、旧路径转发或额外引擎接口。MCP、Skills、提示词、工具等实际接入时再创建目录，配置管理仍放 modules。
 - 流程节点采用 BaseNode + 具体节点对象：run 统一读取输入、记录日志、提交输出，execute 实现自身业务，create_node 普通函数选择类型。业务执行器只准备节点、入口末端并选择返回结果，框架代码集中在 ai/langgraph 引擎，不自建调度器；并行收敛使用列表形式 add_edge 等待全部上游，收敛结果按上游ID保存。节点ID由画布创建并持久化，运行时不重新生成；节点对象仅保存配置，每次运行的数据放在 WorkflowState。当前只支持固定并行分支，不提前增加条件分支、循环、后台任务或会话记忆。
 - 新建或整理 Python 类时默认“一类一文件”，文件名使用类名对应的 snake_case；相关数据对象集中在 data/ 包，不把多个对象类堆在一个 data.py 中。与某个类直接相关的普通辅助函数可以留在该类文件，例如状态合并函数与 WorkflowState 放在一起，不为此额外增加工具层。
@@ -23,7 +24,7 @@
 - 请求字段和对外调用参数写中文含义；主要方法在文档字符串中说明关键参数、返回值，适当用行注释解释框架配置、事务和异常分支，避免逐行机械翻译或为了注释再添加校验。重命名辅助函数后同步维护引用和包文档。
 - 变量、参数和属性使用有业务含义的 snake_case 名称，如 `db_session`、`model_config_service`、`model_config_repository`、`create_request`；类型和依赖别名使用 PascalCase。保留 `self` 等语言惯例及含义明确的通用名称，不堆叠无意义前缀；接口字段和数据库字段按既有契约维护。
 - 查询或返回实体对象时直接标注实体类型，如 `ModelConfig` 或 `ModelConfig | None`；`type[ModelConfig]` 仅用于类本身，不用于查询得到的实体实例。
-- 同步 Service 的数据库写入使用公共 `@transactional`，复用 self.db_session，Repository 不提交事务。模型配置的公开写方法调用对应 *_in_transaction 方法，返回时事务已经提交，再使缓存失效，失败不提前清除缓存。模型测试、问答通过缓存入口按需用短事务读取配置，退出后再调用模型。当前不增加异步、嵌套或事务传播能力。
+- 同步 Service 的数据库写入使用公共 `@transactional`，复用 self.db_session，Repository 不提交事务。模型配置和提示词配置的公开写方法调用对应 *_in_transaction 方法，返回时事务已经提交，再使缓存失效，失败不提前清除缓存。模型测试、问答通过缓存入口按需用短事务读取配置，退出后再调用模型。当前不增加异步、嵌套或事务传播能力。
 - 默认不创建空的 `__init__.py`；当前使用 Python 命名空间包，通过绝对导入组织代码。
 - 主要功能包维护自己的 `README.md`，说明职责、文件入口、调用关系和关键约定。修改包职责、配置、接口或行为时，同步更新对应文档；新增主要功能包时一并补充文档。
 - `Python学习指南.md` 保持简短，仅按用户明确要求补充学习内容，优先用当前项目示例和 Spring 对照，不自动扩展成完整教程。
