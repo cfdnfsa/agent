@@ -24,7 +24,7 @@ promptConfigs.ts 使用 /api/prompt-configs，字段与后端提示词配置保�
 | savePromptConfig(promptId, promptConfig) | ID 为 null 时 POST 新增，否则 PUT 修改 |
 | deletePromptConfig(promptId) | DELETE 指定记录，成功返回 null |
 
-PromptConfigSummary 通过 Pick 明确列表只有 ID、名称，PromptConfigRequest 通过 Omit 排除自增 ID。编辑和详情必须单独请求正文；提交时直接序列化名称、正文，保留空白与换行，不创建额外运行时转换对象。节点引用和执行不在本接口文件中处理。
+PromptConfigSummary 通过 Pick 明确列表只有 ID、名称，PromptConfigRequest 通过 Omit 排除自增 ID。编辑和详情必须单独请求正文；提交时直接序列化名称、正文，保留空白与换行，不创建额外运行时转换对象。流程画布复用列表接口分页加载全部概要供 LLM 选择，仅在节点配置保存 prompt_config_id；运行时正文由后端缓存读取，不通过前端取正文再拼入请求。
 
 ## 流程配置接口
 

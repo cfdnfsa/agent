@@ -12,7 +12,7 @@
 | data/ | 流程连线、流程定义和最终结果，每个对象一个文件 |
 | executor.py | 准备节点和入口末端、调用图引擎、选择返回数据 |
 
-调用顺序：router → service → load_workflow_definition → 流程 Repository。流程查询结束后，加载入口直接返回 WorkflowDefinition。executor 用 workflow_nodes.factory 创建节点；大模型节点按 model_config_id 调用模型配置模块的 get_model_config，命中内存直接取得实体，未命中用独立短会话查询。配置准备完成并关闭查询会话后，再调用 ai/langgraph/engine.py 的 run_graph。节点的 run、execute 不查库，也不调用后续节点。
+调用顺序：router → service → load_workflow_definition → 流程 Repository。流程查询结束后，加载入口直接返回 WorkflowDefinition。executor 用 workflow_nodes.factory 创建节点；大模型节点按 model_config_id 调用 get_model_config，选中提示词时再按 prompt_config_id 调用 get_prompt_config。两者均优先命中内存，未命中用独立短会话查询。配置准备完成并关闭查询会话后，再调用 ai/langgraph/engine.py 的 run_graph。节点的 run、execute 不查库，也不调用后续节点。
 
 parse_workflow_definition 读取 JSON 中明确保存的 start_node_id、return_node_id，使用普通 for 循环分别调用 WorkflowNode.from_dict(node_data)、WorkflowEdge.from_dict(edge_data)，再 append 到对应列表。字段读取和对象创建封装在各自类中，节点的 WorkflowNodeConfig 也在 WorkflowNode 内创建；解析入口只组织读取，实际执行对象仍由 workflow_nodes.factory 创建，不增加额外转换层。
 
