@@ -7,10 +7,11 @@ import '@vue-flow/core/dist/theme-default.css'
 import WorkflowCanvasNode from '../components/WorkflowCanvasNode.vue'
 import {
   workflowNodeLabel, workflowNodeTypes,
-  type WorkflowCanvasEdgeData, type WorkflowCanvasNodeData, type WorkflowDefinition, type WorkflowNodeType,
+  type WorkflowCanvasEdgeData, type WorkflowCanvasNodeData, type WorkflowDefinition, type WorkflowNodeConfig, type WorkflowNodeType,
 } from '../components/workflowNodes'
 import { getWorkflowConfig, runWorkflowConfig, saveWorkflowConfig, type WorkflowInput, type WorkflowResult } from '../api/workflowConfigs'
 import { listModelConfigs, type ModelConfig } from '../api/modelConfigs'
+import { listPromptConfigs, type PromptConfigSummary } from '../api/promptConfigs'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,13 +26,16 @@ const rawDefinition = ref('')
 const selectedNodeId = ref<string | null>(null)
 const selectedEdgeId = ref<string | null>(null)
 const modelOptions = ref<ModelConfig[]>([])
+const promptOptions = ref<PromptConfigSummary[]>([])
 const isLoading = ref(true)
 const isLoadingModels = ref(false)
+const isLoadingPrompts = ref(false)
 const isSaving = ref(false)
 const isRunning = ref(false)
 const loadError = ref('')
 const definitionError = ref('')
 const modelError = ref('')
+const promptError = ref('')
 const saveError = ref('')
 const runError = ref('')
 const successMessage = ref('')
@@ -148,6 +152,28 @@ async function loadModels(): Promise<void> {
   }
 }
 
+/** 分页读取提示词概要，列表刷新失败或已有引用缺失时不自动更改节点选择。 */
+async function loadPrompts(): Promise<void> {
+  if (isLoadingPrompts.value) {
+    return
+  }
+  isLoadingPrompts.value = true
+  promptError.value = ''
+  try {
+    const firstPage = await listPromptConfigs(1, 100)
+    const prompts = [...firstPage.items]
+    for (let page = 2; page <= Math.ceil(firstPage.total / 100); page++) {
+      const nextPage = await listPromptConfigs(page, 100)
+      prompts.push(...nextPage.items)
+    }
+    promptOptions.value = prompts
+  } catch (error) {
+    promptError.value = errorMessage(error)
+  } finally {
+    isLoadingPrompts.value = false
+  }
+}
+
 /** 开始和返回节点分别只能有一个；按钮、拖拽和添加入口共用此规则。 */
 function canAddNode(type: WorkflowNodeType): boolean {
   if (!canEdit.value) return false
@@ -156,13 +182,17 @@ function canAddNode(type: WorkflowNodeType): boolean {
   return true
 }
 
-/** 点击添加时自动排开；拖入时使用落点坐标，配置只保留当前必需的模型ID。 */
+/** 点击添加时自动排开；大模型节点默认选择模型，提示词保持未选择。 */
 function addNode(type: WorkflowNodeType, position?: XYPosition): void {
   if (!canAddNode(type)) return
   let index = 1
   while (nodes.value.some(node => node.id === `${type}_${index}`)) index++
   const id = `${type}_${index}`
-  const config = type === 'llm' ? { model_config_id: modelOptions.value[0]?.id ?? null } : {}
+  const config: WorkflowNodeConfig = {}
+  if (type === 'llm') {
+    config.model_config_id = modelOptions.value[0]?.id ?? null
+    config.prompt_config_id = null
+  }
   nodes.value = [...nodes.value, {
     id, type: 'workflow', position: position ?? { x: 80 + nodes.value.length * 280, y: 160 },
     data: reactive({ definition: { id, name: `${workflowNodeLabel(type)} ${index}`, type, config } }),
@@ -264,7 +294,7 @@ watch(() => route.params.workflowId, () => {
   const targetId = route.params.workflowId === 'new' ? null : Number(route.params.workflowId)
   if (targetId !== workflowId.value) void loadWorkflow()
 })
-onMounted(() => { void loadWorkflow(); void loadModels() })
+onMounted(() => { void loadWorkflow(); void loadModels(); void loadPrompts() })
 </script>
 
 <template>
@@ -342,8 +372,15 @@ onMounted(() => { void loadWorkflow(); void loadModels() })
                   <el-option v-for="model in modelOptions" :key="model.id" :label="`${model.model_name}（${model.model_code}）`" :value="model.id" />
                 </el-select>
               </el-form-item>
+              <el-form-item label="提示词（可选）">
+                <el-select v-model="selectedDefinition.config.prompt_config_id" filterable clearable :loading="isLoadingPrompts" placeholder="不选择则直接使用上游输入">
+                  <el-option v-for="prompt in promptOptions" :key="prompt.id" :label="`${prompt.prompt_name}（ID：${prompt.id}）`" :value="prompt.id" />
+                </el-select>
+              </el-form-item>
             </el-form>
             <el-alert v-if="modelError" :title="modelError" type="error" :closable="false"><el-button link type="primary" :disabled="isLoadingModels" @click="loadModels">重新加载模型</el-button></el-alert>
+            <el-alert v-if="promptError" :title="promptError" type="error" :closable="false"><el-button link type="primary" :disabled="isLoadingPrompts" @click="loadPrompts">重新加载提示词</el-button></el-alert>
+            <p class="designer-hint">提示词作为当前模型的任务说明，正文在运行时读取；可清除选择。</p>
             <p class="designer-hint">接收一个上游，文字直接交给模型，对象转为 JSON 文字。多路输入请先连接收敛节点。</p>
           </template>
           <p v-else-if="selectedDefinition.type === 'merge'" class="designer-hint">将多个上游连到左侧圆点，等待全部完成后，按节点 ID 收集结果并传给下游，无需额外配置。</p>

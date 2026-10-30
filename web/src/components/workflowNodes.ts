@@ -3,6 +3,8 @@ export type WorkflowNodeType = 'start' | 'llm' | 'merge' | 'return'
 
 export interface WorkflowNodeConfig {
   model_config_id?: number | null
+  /** 可选提示词配置ID，正文由后端运行时读取。 */
+  prompt_config_id?: number | null
   [key: string]: unknown
 }
 

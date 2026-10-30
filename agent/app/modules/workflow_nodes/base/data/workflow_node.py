@@ -13,7 +13,7 @@ class WorkflowNode:
     Attributes:
         id: 流程内唯一的节点ID，连线和执行定位使用它。
         type: 节点类型，当前为 start、llm、merge 或 return。
-        config: 当前节点的配置，例如 config.model_config_id。
+        config: 当前节点的模型和可选提示词配置，例如 config.prompt_config_id。
         name: 用户填写的显示名称，未填写时日志使用 ID。
 
     Examples:
@@ -22,12 +22,12 @@ class WorkflowNode:
         {
             "id": "llm_1",
             "type": "llm",
-            "config": {"model_config_id": 1},
+            "config": {"model_config_id": 1, "prompt_config_id": 2},
             "name": "生成回答"
         }
 
-        from_dict 读取后，可通过 node.config.model_config_id 取得模型配置ID。
-        开始、收敛、返回节点无需选择模型，它们的 config 可以是空对象 {}。
+        from_dict 读取后，通过 node.config.model_config_id、prompt_config_id 取得所选配置ID。
+        提示词可省略或为 null；开始、收敛、返回节点的 config 可以是空对象 {}。
     """
 
     id: str
@@ -44,14 +44,15 @@ class WorkflowNode:
             node_data: 原始节点 JSON 字典，包含 id、type、config，可选 name。
 
         Returns:
-            节点定义对象；config.model_config_id 读取所选模型，未配置时为 None。
+            节点定义对象，分别读取所选模型和可选提示词，未配置字段为 None。
         """
         # cls 代表当前类，cls(...) 创建实例；这里只组装定义，不执行业务节点。
         return cls(
             id=node_data["id"],
             type=node_data["type"],
             config=WorkflowNodeConfig(
-                model_config_id=node_data["config"].get("model_config_id")
+                model_config_id=node_data["config"].get("model_config_id"),
+                prompt_config_id=node_data["config"].get("prompt_config_id"),
             ),
             name=node_data.get("name"),
         )

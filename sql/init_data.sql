@@ -2,7 +2,7 @@
 -- 请先执行对应数据库的建表脚本，确保 prompt_config 表已创建。
 
 -- 示例提示词：只插入尚无同名记录的模板，不覆盖已维护的内容，不指定自增ID。
--- 正文为普通任务说明，用户问题和上游结果在后续节点接入时单独传入。
+-- 正文作为系统提示词，上游输入作为用户消息传入，不做变量替换。
 INSERT INTO prompt_config (prompt_name, prompt_content)
 SELECT seed_prompt.prompt_name, seed_prompt.prompt_content
 FROM (

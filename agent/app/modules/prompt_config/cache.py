@@ -19,7 +19,7 @@ def get_prompt_config(prompt_id: int) -> PromptConfig | None:
     """按ID返回完整实体，未找到时返回 None，不缓存空值。
 
     Args:
-        prompt_id: 提示词配置表主键，后续流程节点选择提示词时使用。
+        prompt_id: 流程 LLM 节点选择的提示词配置主键。
 
     Returns:
         包含名称和正文的原提示词实体，查询会话已关闭；不存在时为 None。

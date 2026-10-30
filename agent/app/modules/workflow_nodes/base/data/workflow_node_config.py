@@ -9,6 +9,8 @@ class WorkflowNodeConfig:
 
     Attributes:
         model_config_id: 大模型节点选中的模型配置主键；其他节点无需填写。
+        prompt_config_id: 可选提示词配置主键，未选择时为 None，LLM 按原来的输入直接调用。
     """
 
     model_config_id: int | None = None
+    prompt_config_id: int | None = None

@@ -23,6 +23,8 @@ answer = str(model.invoke(question).text)
 
 invoke 由框架提供，text 取得回复中的文本。问题原样传入，不校验或去空格，不增加历史消息。每种接入方式的创建参数放在自己的普通函数中，不新增类、工厂或协议层。
 
+流程 LLM 节点选择提示词时，在节点内把已加载的正文放入 SystemMessage、上游文字放入 HumanMessage，再调用 invoke；未选择时继续传入文字。消息对象来自 langchain-core，角色含义见 [官方消息说明](https://docs.langchain.com/oss/python/langchain/messages)。本包继续只负责创建模型，不查询或拼装提示词。
+
 ## 依赖与地址
 
 使用 langchain-core、langchain-openai、langchain-anthropic、langchain-ollama、langchain-google-genai。流程图的构建和执行集中在同级 [langgraph](../langgraph/README.md)，本包只处理模型创建；当前不增加 Agent 循环或记忆。
