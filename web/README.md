@@ -13,13 +13,19 @@ npm run dev
 
 访问 http://localhost:5173 。执行 `npm run build` 进行类型检查并构建。
 
-顶部导航切换“模型配置”“流程配置”和“调试台”。页面使用 hash 路由：`/#/model-configs`、`/#/workflow-configs`、`/#/playground`，刷新子页面无需额外配置服务器回退规则。
+顶部导航切换“模型配置”“提示词配置”“流程配置”和“调试台”。页面使用 hash 路由：`/#/model-configs`、`/#/prompt-configs`、`/#/workflow-configs`、`/#/playground`，刷新子页面无需额外配置服务器回退规则。
 
 ## 调试台
 
 选择已保存的模型，输入问题后发送，回答以聊天气泡完整展示。每次请求只提交模型配置ID和当前问题，不携带旧气泡中的消息，没有上下文记忆，也不保存聊天记录。切换模型、清空、导航离开或刷新页面会清除气泡。问题没有前端长度或空内容限制，不自动去空格，失败时保留输入供重试。
 
 模型选择复用列表接口，分页读取全部已配置模型；没有模型时提示先到模型配置页添加。发送中禁止切换模型或重复发送，等待期间显示“正在回答”。
+
+## 提示词配置管理
+
+PromptConfigs.vue 提供提示词分页列表、新增、编辑、只读详情与删除确认，入口为 `/#/prompt-configs`。列表只显示 ID 和名称，编辑和详情通过详情接口单独读取正文；正文读取成功后才允许保存，读取失败可在弹窗内重试，避免概要中的缺失正文覆盖已有内容。
+
+新增和编辑共用名称输入框、正文多行文本框；名称和正文原样提交，不增加必填、长度限制或自动 trim。保存失败保留输入，删除失败保留确认弹窗，删除末页最后一条后自动退回有效页码。当前只维护提示词配置，流程节点选用提示词后续接入。
 
 ## 流程配置管理
 
@@ -46,7 +52,7 @@ WorkflowDesigner.vue 全屏显示 Vue Flow，工具箱和配置区可收起。�
 
 API Key 不回显。编辑时留空保留原密钥，填写新值替换，勾选“清除已保存的 API Key”则提交 null。删除前需要确认；保存或删除失败时保留弹窗，显示错误后可以重试。请求进行中禁止重复提交和关闭操作弹窗。
 
-先启动 Python 后端（默认 `http://127.0.0.1:8000`），再启动前端。页面请求 `/api/model-configs`、`/api/workflow-configs` 和 `/api/playground/chat`，由 `vite.config.ts` 的开发代理转发到后端。后端地址不同时修改代理目标即可；不需要添加后端跨域配置。
+先启动 Python 后端（默认 `http://127.0.0.1:8000`），再启动前端。页面请求 `/api/model-configs`、`/api/prompt-configs`、`/api/workflow-configs` 和 `/api/playground/chat`，由 `vite.config.ts` 的开发代理转发到后端。后端地址不同时修改代理目标即可；不需要添加后端跨域配置。
 
 ## 文件职责
 
@@ -54,14 +60,16 @@ API Key 不回显。编辑时留空保留原密钥，填写新值替换，勾选
 |---|---|
 | `src/App.vue` | 应用外壳、中文组件配置、页面入口 |
 | `src/views/ModelConfigs.vue` | 模型配置页面、原样提交表单、分页及交互状态 |
+| `src/views/PromptConfigs.vue` | 提示词概要分页、完整正文读取与增删改查 |
 | `src/views/WorkflowConfigs.vue` | 流程列表、画布入口和删除确认 |
 | `src/views/WorkflowDesigner.vue` | 全屏画布、模型选择、运行结果和保存还原 |
 | `src/views/Playground.vue` | 模型选择与单轮问答接口装配 |
 | `src/components/ChatPanel.vue` | 可复用的输入、消息气泡和发送状态 |
 | `src/components/WorkflowCanvasNode.vue` | 通用节点卡片和连接圆点 |
 | `src/components/workflowNodes.ts` | 工具箱节点目录和流程结构类型 |
-| `src/router.ts` | 模型配置、流程配置和调试台页面路由 |
+| `src/router.ts` | 模型配置、提示词配置、流程配置和调试台页面路由 |
 | `src/api/modelConfigs.ts` | 请求与响应类型、列表和增删改接口 |
+| `src/api/promptConfigs.ts` | 提示词概要、详情、保存和删除接口 |
 | `src/api/workflowConfigs.ts` | 流程概要、详情、保存、删除和运行接口 |
 | `src/api/playground.ts` | 提交当前问题，取得回答 |
 | `src/api/request.ts` | 共用 fetch 与统一响应处理 |

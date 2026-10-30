@@ -16,6 +16,7 @@ const route = useRoute()
         <span class="header-divider"></span>
         <nav class="app-nav" aria-label="主导航">
           <RouterLink to="/model-configs">模型配置</RouterLink>
+          <RouterLink to="/prompt-configs">提示词配置</RouterLink>
           <RouterLink to="/workflow-configs" :class="{ 'router-link-active': route.path.startsWith('/workflow-configs') }">流程配置</RouterLink>
           <RouterLink to="/playground">调试台</RouterLink>
         </nav>

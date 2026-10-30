@@ -1,6 +1,6 @@
 # 前端接口
 
-公共 `request.ts` 负责 fetch 和统一响应解析，`modelConfigs.ts`、`workflowConfigs.ts` 与 `playground.ts` 共同复用，避免重复处理网络错误。
+公共 `request.ts` 负责 fetch 和统一响应解析，`modelConfigs.ts`、`promptConfigs.ts`、`workflowConfigs.ts` 与 `playground.ts` 共同复用，避免重复处理网络错误。
 
 `playground.ts` 的 `askModel(modelConfigId, question)` 调用 `POST /api/playground/chat`，只提交 `{model_config_id, question}` 并返回回答字符串，不接收或发送历史消息。
 
@@ -12,6 +12,19 @@
 | `saveModelConfig(modelId, modelConfig)` | ID 为 null 时 POST 新增，否则 PUT 修改 |
 | `deleteModelConfig(modelId)` | DELETE 删除指定记录 |
 | `testModelConfig(modelId)` | POST `/api/model-configs/{id}/test`，无请求体；成功返回 elapsed_ms |
+
+## 提示词配置接口
+
+promptConfigs.ts 使用 /api/prompt-configs，字段与后端提示词配置保持一致：
+
+| 方法 | 用途 |
+|---|---|
+| listPromptConfigs(page, pageSize) | GET 分页概要，仅含 id、prompt_name |
+| getPromptConfig(promptId) | GET 完整详情，包含 prompt_content |
+| savePromptConfig(promptId, promptConfig) | ID 为 null 时 POST 新增，否则 PUT 修改 |
+| deletePromptConfig(promptId) | DELETE 指定记录，成功返回 null |
+
+PromptConfigSummary 通过 Pick 明确列表只有 ID、名称，PromptConfigRequest 通过 Omit 排除自增 ID。编辑和详情必须单独请求正文；提交时直接序列化名称、正文，保留空白与换行，不创建额外运行时转换对象。节点引用和执行不在本接口文件中处理。
 
 ## 流程配置接口
 
