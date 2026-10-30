@@ -1,6 +1,6 @@
-# LangChain 模型创建
+# LangChain 模型与消息模板
 
-本包位于 infrastructure/ai/langchain，使用 LangChain 的模型集成，model_client.py 只负责创建模型对象。模型测试和问答在各自 Service 中直接调用框架的 invoke，流程模型节点也复用这个创建入口。
+本包位于 infrastructure/ai/langchain。model_client.py 只创建模型对象，prompt_builder.py 使用框架消息模板组装流程节点输入；两者均不查询数据库或决定上下游数据范围。模型测试和问答继续在各自 Service 中直接调用 invoke。
 
 ## 普通函数
 
@@ -11,6 +11,7 @@
 | create_anthropic_model(model_config) | 创建 Anthropic 模型 |
 | create_ollama_model(model_config) | 创建 Ollama 模型 |
 | create_google_genai_model(model_config) | 创建 Google Gemini 模型 |
+| build_chat_prompt(context_text, system_prompt) | 使用公共 ChatPromptTemplate 组装上下文与可选系统消息 |
 
 model_config 直接使用 ModelConfig 实体，包含 Key，不拆开传递连接参数。流程节点创建、模型测试和调试台通过 [模型配置缓存](../../../modules/model_config/README.md#模型配置缓存) 取得实体，未命中时的查询会话在调用模型前已关闭，expire_on_commit=False 保留已加载字段。本包不读取缓存或查询数据库，只使用传入的实体。
 
@@ -23,11 +24,13 @@ answer = str(model.invoke(question).text)
 
 invoke 由框架提供，text 取得回复中的文本。问题原样传入，不校验或去空格，不增加历史消息。每种接入方式的创建参数放在自己的普通函数中，不新增类、工厂或协议层。
 
-流程 LLM 节点选择提示词时，在节点内把已加载的正文放入 SystemMessage、上游文字放入 HumanMessage，再调用 invoke；未选择时继续传入文字。消息对象来自 langchain-core，角色含义见 [官方消息说明](https://docs.langchain.com/oss/python/langchain/messages)。本包继续只负责创建模型，不查询或拼装提示词。
+流程 LLM 节点先通过公共文字函数转换已经选好的上下文，再调用 build_chat_prompt。公共模板只包含“以下是本次流程传入的数据：”和 context 变量，由 ChatPromptTemplate.format_prompt 自动填充并生成 ChatPromptValue，可直接交给 model.invoke。节点选中的提示词正文直接创建 SystemMessage，不作为模板解析，JSON 花括号、空白和换行原样保留；未选提示词时只有用户消息。框架用法见 [ChatPromptTemplate](https://reference.langchain.com/python/langchain-core/prompts/chat/ChatPromptTemplate)。
+
+累计或仅当前结果的传递规则位于节点公共层。本包只接收准备好的文字，不读取 WorkflowState，也不加载配置实体。流程节点的完整模型回复留在内部 LlmNodeOutput.message 中，默认业务结果仍是正文。
 
 ## 依赖与地址
 
-使用 langchain-core、langchain-openai、langchain-anthropic、langchain-ollama、langchain-google-genai。流程图的构建和执行集中在同级 [langgraph](../langgraph/README.md)，本包只处理模型创建；当前不增加 Agent 循环或记忆。
+使用 langchain-core、langchain-openai、langchain-anthropic、langchain-ollama、langchain-google-genai。流程图的构建和执行集中在同级 [langgraph](../langgraph/README.md)，本包处理模型创建和消息模板；当前不增加 Agent 循环或记忆。
 
 URL 原样传给对应集成的 base_url，不自动补路径、删除后缀或解析版本；按 SDK 要求填写后，通过页面测试确认能否调用。请求路径、鉴权和响应解析由对应 SDK 负责。
 

@@ -26,7 +26,7 @@ executor.py 中的 run_workflow 只保留步骤顺序，辅助函数继续放在
 | create_runtime_nodes | 整理上游时检查开始、返回ID与唯一性，检查返回连线，再通过 factory 创建节点 |
 | find_terminal_node_ids | 根据连线找出没有下游的节点，保留定义中的节点顺序 |
 | run_graph | 调用 AI 层图引擎，完成登记、连线和执行 |
-| build_workflow_result | 只取返回节点的输出并包装为 WorkflowResult，未执行到返回节点时抛出业务异常 |
+| build_workflow_result | 只取返回节点 NodeOutput.value 并包装为 WorkflowResult，未执行到返回节点时抛出业务异常 |
 
 ```mermaid
 flowchart TD
@@ -40,7 +40,7 @@ run_workflow 直接接收 WorkflowDefinition 和本次输入，不再打包流�
 
 节点逻辑从 [workflow_nodes/base/base_node.py](../workflow_nodes/base/base_node.py) 开始阅读，再看 node 下的具体节点与外层 factory.py；公共 run 统一读取输入、调用具体业务、记录日志并提交输出。节点包只依赖自己的数据对象和所需公共能力，不反向导入运行包。
 
-再读 executor.py，了解如何识别入口、末端和选择最终返回。框架代码在 ai/langgraph/engine.py：run_graph 依次调用 register_nodes 登记执行方法、connect_edges 建立依赖、execute_graph 编译并执行；步骤图见 [图引擎说明](../../infrastructure/ai/langgraph/README.md)。connect_edges 将上游ID列表交给 graph.add_edge(source_ids, node_id)，由 LangGraph 等待全部上游后再运行当前节点。比如“开始 → 大模型A、大模型B → 收敛 → 大模型C → 返回”，收敛输出形如 {"llm_a":"回答A","llm_b":"回答B"}。分支长度不同时也等待所有指定上游；当前不处理条件分支中未执行的路径，也未实现循环。
+再读 executor.py，了解如何识别入口、末端和选择最终返回。框架代码在 ai/langgraph/engine.py：run_graph 依次调用 register_nodes、connect_edges、execute_graph；步骤图见 [图引擎说明](../../infrastructure/ai/langgraph/README.md)。列表形式 graph.add_edge(source_ids, node_id) 由 LangGraph 等待全部上游，分支长度不同时也等待全部指定上游；当前不处理条件分支中未执行的路径，也未实现循环。节点公共层按 data_transfer_mode 累计或只传当前结果，收敛合并各分支允许传递的数据并按ID去重。
 
 节点对象只保存配置；本次输入输出始终放在独立 WorkflowState 中。节点ID沿用画布保存的值，加载或运行时不重新生成，避免破坏连线引用。
 
@@ -54,9 +54,9 @@ WorkflowState 在 TYPE_CHECKING 块中声明 dataclass 自动生成的元信息�
 
 `POST /api/workflow-configs/{id}/run`，请求体 `{"text":"你好","user_id":"user_001"}`，user_id 可省略或为 null。FastAPI 按现有 WorkflowInput dataclass 完成基础字段解析，Router 直接传给 Service，不再手工从字典取值，不增加额外必填、长度或格式等业务校验。开始节点输出 text，user_id 暂时保留在 state.inputs 中供后续节点读取；不支持旧请求字段。
 
-成功 data 为 `{"payload":"模型回答"}`，payload 也可以是对象或列表，由返回节点的实际输出决定；失败交给公共异常处理，不返回中间步骤、额外调试结构或运行历史。数据库和已保存流程定义不变。
+成功 data 为 `{"payload":"模型回答"}`，payload 也可以是对象或列表，由返回节点的 value 决定；失败交给公共异常处理，不返回中间步骤、模型原始消息或运行历史。表结构不变，新增的 data_transfer_mode 保存在已有流程定义文本中。
 
-节点只提交自己的输出，WorkflowState 保存本次 inputs、node_outputs，merge_node_outputs 合并存储增量；它不是收敛节点，也不负责等待。executor 识别全部无下游的末端，引擎将其连接 END；其中只有 return_node_id 对应的输出进入响应。比如一条支路“大模型B → 返回”，另一条支路“大模型C”独立结束，C 仍执行，但结果不混入响应。
+节点只提交自己的 NodeOutput，WorkflowState 保存本次 inputs、node_outputs，merge_node_outputs 合并存储增量；它不是收敛节点，也不负责等待。NodeOutput.value 是当前结果，context 是沿连线传给下游的上下文，result_only 不会删除状态记录。executor 识别全部无下游的末端，引擎将其连接 END；其中只有 return_node_id 对应的 value 进入响应。比如一条支路“大模型B → 返回”，另一条支路“大模型C”独立结束，C 仍执行，但结果不混入响应。
 
 返回节点不是框架 END，也不触发提前返回 HTTP。当前同步等待整次图运行完成，其他分支未处理的异常也会影响本次请求；后台任务和队列后续再做。大模型和返回节点都接收一个上游，多路结果先接收敛节点；判断、循环和工具能力后续再做。
 

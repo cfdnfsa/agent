@@ -33,7 +33,7 @@ uv run python -m uvicorn main:app --reload
 
 `app/modules/prompt_config` 提供提示词新增、分页列表、详情、修改和删除，接口前缀为 `/api/prompt-configs`。表中只有 id、prompt_name、prompt_content，名称允许重复，正文原样保存；列表只读取 ID 和名称，详情才读取正文。先执行 `sql/pgsql.sql` 中的 prompt_config 建表语句，应用启动不自动建表。
 
-写接口直接接收 JSON，提交哪些字段就更新哪些字段，复用公共事务、错误处理和返回结构。LLM 节点通过可选 prompt_config_id 选择提示词，由 factory 调用 get_prompt_config 按需读取完整实体；未命中才用短会话查库，增删改提交成功后清除对应缓存。节点调用模型时以系统消息传入正文，上游内容作为用户消息，不进行变量替换；未选择时直接使用上游输入。管理列表和详情仍直接查库，接口和缓存规则见 [提示词配置包文档](app/modules/prompt_config/README.md)。
+写接口直接接收 JSON，提交哪些字段就更新哪些字段，复用公共事务、错误处理和返回结构。LLM 节点通过可选 prompt_config_id 选择提示词，由 factory 调用 get_prompt_config 按需读取完整实体；未命中才用短会话查库，增删改提交成功后清除对应缓存。提示词正文原样作为系统消息，公共 LangChain 模板把上游上下文填入用户消息；未选提示词时只生成用户消息，不解析正文中的变量。管理列表和详情仍直接查库，接口和缓存规则见 [提示词配置包文档](app/modules/prompt_config/README.md)。
 
 ## 流程运行
 
@@ -41,7 +41,7 @@ uv run python -m uvicorn main:app --reload
 
 流程定义直接保存 start_node_id、return_node_id，由前端随节点增删维护；草稿缺少对应节点时为 null，运行时必须有值。后端整理上游时确认恰好有一个开始和一个返回节点且与指定ID一致，返回节点必须接收一个上游且没有下游，不符合时返回公共业务错误，不再单独查找这两个节点。引擎接收单个 start_node_id，业务末端仍可有多个。其他分支独立结束但结果不混入响应，当前仍同步等待全部分支；后台任务和队列后续再做。
 
-config_loader.py 查询流程文本、结束事务，再解析并直接返回 WorkflowDefinition，Service 组织执行；executor 准备节点、入口末端和返回策略，框架构建与执行交给 [ai/langgraph/engine.py](app/infrastructure/ai/langgraph/engine.py)。同级 [workflow_nodes](app/modules/workflow_nodes/README.md) 包的 base 子包维护 BaseNode 和共用数据，node 子包维护 StartNode、LlmNode、MergeNode、ReturnNode，外层 factory.py 按配置创建节点，通过模型配置缓存取得大模型实体。公共 run 读取输入、调用 execute、记录日志并提交输出；LangGraph 负责调度和等待全部上游，收敛节点按上游ID收集结果，返回节点原样传递一个上游的数据。大模型接收一个上游，对象转为 JSON 文字后调用模型。阅读节点逻辑时先看 workflow_nodes/base/base_node.py，再看 node 下的具体实现。
+config_loader.py 查询流程文本、结束事务，再解析并直接返回 WorkflowDefinition，Service 组织执行；executor 准备节点、入口末端和返回策略，框架构建与执行交给 [ai/langgraph/engine.py](app/infrastructure/ai/langgraph/engine.py)。同级 [workflow_nodes](app/modules/workflow_nodes/README.md) 包维护节点，factory.py 通过缓存准备配置资源。公共 run 读取 NodeContext、调用 execute、记录日志并提交 NodeOutput；默认 accumulate 累计传递，result_only 只传当前结果，沿实际连线确定范围。收敛合并上游上下文并按ID去重，返回节点只取上游 value。公共文字转换在 base/text.py，框架消息模板在 ai/langchain/prompt_builder.py，LLM 内部保留完整模型消息，默认业务结果仍是正文。阅读时先看 base/base_node.py，再看具体节点。
 
 节点定义、输入和状态集中在 [workflow_nodes/base/data/](app/modules/workflow_nodes/base/data/README.md)，流程连线、流程定义和最终结果在 [workflow_runtime/data/](app/modules/workflow_runtime/data/README.md)，每个对象一个文件；运行包依赖节点包，节点包不反向依赖。例如 workflow_definition.nodes、node.config.model_config_id、result.payload，均有类型和中文 Attributes 文档；数据库和 JSON 存储字段不变。当前支持固定并行分支收敛，条件分支、循环和记忆后续再做。
 
