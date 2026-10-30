@@ -1,4 +1,4 @@
--- 模型配置与流程配置初始化脚本，最低支持 MySQL 5.7，在目标数据库中执行。
+-- 模型配置、流程配置与提示词配置初始化脚本，最低支持 MySQL 5.7，在目标数据库中执行。
 -- 仅创建尚不存在的表；已有表的字段变更需另写迁移脚本。
 CREATE TABLE IF NOT EXISTS model_config
 (
@@ -23,3 +23,14 @@ CREATE TABLE IF NOT EXISTS workflow_config
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='流程配置';
+
+-- 多个流程节点可复用同一份提示词，节点引用后续保存在流程定义中。
+CREATE TABLE IF NOT EXISTS prompt_config
+(
+    id             BIGINT       NOT NULL AUTO_INCREMENT COMMENT '提示词配置ID',
+    prompt_name    VARCHAR(100) NOT NULL COMMENT '提示词名称',
+    prompt_content LONGTEXT     NOT NULL COMMENT '提示词正文',
+    PRIMARY KEY (id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='提示词配置';

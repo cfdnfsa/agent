@@ -27,7 +27,13 @@ uv run python -m uvicorn main:app --reload
 
 先在目标数据库执行 `sql/pgsql.sql` 中新增的流程建表部分，也可以执行完整初始化脚本；已有表不会重复创建。MySQL 5.7+ 的对应定义保存在 `sql/mysql.sql`，流程大文本分别使用 PostgreSQL TEXT、MySQL LONGTEXT。详见 [流程配置包文档](app/modules/workflow_config/README.md) 和仓库 [SQL 说明](../sql/README.md)。
 
-公共 Base 只声明 id；模型配置和流程配置都不维护创建时间、更新时间。已有模型表需要执行 [删除时间字段的增量 SQL](../sql/remove_model_config_time_columns.sql)，新建数据库直接使用更新后的初始化脚本。
+公共 Base 只声明 id；模型配置、流程配置和提示词配置都不维护创建时间、更新时间，表结构以当前初始化脚本为准。
+
+## 提示词配置
+
+`app/modules/prompt_config` 提供提示词新增、分页列表、详情、修改和删除，接口前缀为 `/api/prompt-configs`。表中只有 id、prompt_name、prompt_content，名称允许重复，正文原样保存；列表只读取 ID 和名称，详情才读取正文。先执行 `sql/pgsql.sql` 中的 prompt_config 建表语句，应用启动不自动建表。
+
+写接口直接接收 JSON，提交哪些字段就更新哪些字段，复用公共事务、错误处理和返回结构。接口和示例见 [提示词配置包文档](app/modules/prompt_config/README.md)。当前完成配置管理，流程节点引用提示词后续接入。
 
 ## 流程运行
 
@@ -51,6 +57,7 @@ AI 框架接入集中在 [infrastructure/ai](app/infrastructure/ai/README.md)：
 | [公共能力](app/core/README.md) | 配置、日志、公共异常和统一返回结构 |
 | [数据库公共能力](app/infrastructure/database/README.md) | 连接池、会话、ORM 公共字段和事务 |
 | [模型配置管理](app/modules/model_config/README.md) | 接口、数据结构、业务流程和数据库操作 |
+| [提示词配置管理](app/modules/prompt_config/README.md) | 名称与正文、基础增删改查、概要分页 |
 | [流程配置管理](app/modules/workflow_config/README.md) | 三字段流程表、文本定义、分页及基础增删改查 |
 | [流程运行](app/modules/workflow_runtime/README.md) | 运行接口、统一配置加载、LangGraph 执行与日志 |
 | [流程节点](app/modules/workflow_nodes/README.md) | 节点基类、开始、大模型、收敛、返回与节点创建入口 |

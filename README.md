@@ -30,12 +30,15 @@ workflow_nodes 按 base（基类和共用数据）、node（具体节点）分�
 
 模型配置统一通过 [进程内缓存](agent/app/modules/model_config/README.md#模型配置缓存) 读取：命中直接使用，未命中再查库；配置增删改提交成功后清除对应缓存。流程加载直接返回 WorkflowDefinition，不再打包模型 Map。
 
+提示词配置通过 `/api/prompt-configs` 维护名称和正文，提供基础增删改查，名称允许重复，正文原样保存；流程节点选用提示词后续接入。
+
 知识库、工具、MCP、Skill、判断、循环和流程定义缓存等后续按小步骤增加。
 
 
 - [前端启动说明](web/README.md)
 - [后端启动与 PyCharm 配置](agent/README.md)
 - [流程配置接口与表结构](agent/app/modules/workflow_config/README.md)
+- [提示词配置接口](agent/app/modules/prompt_config/README.md)
 - [流程运行与日志](agent/app/modules/workflow_runtime/README.md)
 - [流程节点与扩展入口](agent/app/modules/workflow_nodes/README.md)
 - [AI 框架接入与执行](agent/app/infrastructure/ai/README.md)
