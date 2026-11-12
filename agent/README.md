@@ -37,7 +37,9 @@ uv run python -m uvicorn main:app --reload
 
 ## 流程运行
 
-`app/modules/workflow_runtime` 独立负责执行，配置管理留在 workflow_config。接口为 `POST /api/workflow-configs/{id}/run`，请求体 `{"text":"你好","user_id":"user_001"}`，user_id 可省略或为 null。FastAPI 直接解析为 WorkflowInput，内部通过 .text、.user_id 访问；开始节点仅输出文字，用户ID暂时保留在状态中。返回 `{"payload":"模型回答"}`，payload 也可以是对象或列表。提供开始、大模型、收敛、返回节点，全部末端自动结束，接口只返回返回节点的数据。
+`app/modules/workflow_runtime` 独立负责执行，配置管理留在 workflow_config。接口为 `POST /api/workflow-configs/{id}/run`，请求体 `{"text":"你好","user_id":"user_001"}`，user_id 可省略或为 null。FastAPI 直接解析为 WorkflowInput，内部通过 .text、.user_id 访问；开始节点仅输出文字，用户ID暂时保留在状态中。返回 `{"payload":"模型回答"}`，payload 也可以是对象或列表。提供开始、大模型、意图分析、收敛、返回节点，全部末端自动结束，接口只返回返回节点的数据。
+
+另外提供独立的 intent_analysis 节点，复用模型与可选补充提示词，内置分类说明；普通 invoke 后由 PydanticOutputParser 解析 IntentAnalysisResult，任务类型为 database、knowledge、chat、unsupported。配置“开始 → 意图分析 → 返回”可查看 tasks 对象；当前只分析需求，不执行任务。结构解析失败返回业务错误，实际分类质量需使用所选模型确认。示例见 [意图分析流程](../docs/examples/intent-analysis.json)。
 
 流程定义直接保存 start_node_id、return_node_id，由前端随节点增删维护；草稿缺少对应节点时为 null，运行时必须有值。后端整理上游时确认恰好有一个开始和一个返回节点且与指定ID一致，返回节点必须接收一个上游且没有下游，不符合时返回公共业务错误，不再单独查找这两个节点。引擎接收单个 start_node_id，业务末端仍可有多个。其他分支独立结束但结果不混入响应，当前仍同步等待全部分支；后台任务和队列后续再做。
 
@@ -60,7 +62,7 @@ AI 框架接入集中在 [infrastructure/ai](app/infrastructure/ai/README.md)：
 | [提示词配置管理](app/modules/prompt_config/README.md) | 名称与正文、基础增删改查、概要分页 |
 | [流程配置管理](app/modules/workflow_config/README.md) | 三字段流程表、文本定义、分页及基础增删改查 |
 | [流程运行](app/modules/workflow_runtime/README.md) | 运行接口、统一配置加载、LangGraph 执行与日志 |
-| [流程节点](app/modules/workflow_nodes/README.md) | 节点基类、开始、大模型、收敛、返回与节点创建入口 |
+| [流程节点](app/modules/workflow_nodes/README.md) | 节点基类、开始、大模型、意图分析、收敛、返回与创建入口 |
 | [AI 公共能力](app/infrastructure/ai/README.md) | AI 框架接入与业务模块之间的职责 |
 | [LangGraph 图引擎](app/infrastructure/ai/langgraph/README.md) | 节点注册、连线、编译与执行 |
 | [模型调用公共能力](app/infrastructure/ai/langchain/README.md) | LangChain 模型集成、实体传参、基础地址和错误处理 |

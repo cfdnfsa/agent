@@ -1,4 +1,4 @@
-"""大模型节点资源：集中保存准备阶段读取的配置实体。"""
+"""模型调用资源：普通大模型与意图分析共用准备阶段读取的配置实体。"""
 
 from dataclasses import dataclass
 
@@ -8,7 +8,7 @@ from app.modules.prompt_config.entity import PromptConfig
 
 @dataclass
 class LlmNodeResources:
-    """一个大模型节点需要的资源，由 factory 组装后交给节点。
+    """使用模型的节点所需资源，由 factory 组装后交给具体节点。
 
     直接保存已有实体，内部只读；每次运行的输入和输出仍放在 WorkflowState 中。
 

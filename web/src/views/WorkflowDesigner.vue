@@ -193,17 +193,17 @@ function canAddNode(type: WorkflowNodeType): boolean {
   return true
 }
 
-/** 点击添加时自动排开；大模型节点默认选择模型，提示词保持未选择。 */
+/** 点击添加时自动排开；调用模型的节点默认选择模型，提示词保持未选择。 */
 function addNode(type: WorkflowNodeType, position?: XYPosition): void {
   if (!canAddNode(type)) return
   let index = 1
   while (nodes.value.some(node => node.id === `${type}_${index}`)) index++
   const id = `${type}_${index}`
   const config: WorkflowNodeConfig = {}
-  if (type === 'llm' || type === 'merge') {
+  if (type === 'llm' || type === 'intent_analysis' || type === 'merge') {
     config.input_scope = 'all_upstream'
   }
-  if (type === 'llm') {
+  if (type === 'llm' || type === 'intent_analysis') {
     config.model_config_id = modelOptions.value[0]?.id ?? null
     config.prompt_config_id = null
   }
@@ -379,28 +379,29 @@ onMounted(() => { void loadWorkflow(); void loadModels(); void loadPrompts() })
             <p class="designer-hint">仅用于本次运行，不随流程保存。运行前会自动保存当前画布。</p>
             <el-button type="success" :disabled="!canRun" :loading="isRunning" @click="runWorkflow">▶ 运行</el-button>
           </template>
-          <template v-else-if="selectedDefinition.type === 'llm'">
+          <template v-else-if="selectedDefinition.type === 'llm' || selectedDefinition.type === 'intent_analysis'">
             <el-form label-position="top" :disabled="!canEdit">
               <el-form-item label="模型">
                 <el-select v-model="selectedDefinition.config.model_config_id" filterable clearable :loading="isLoadingModels" placeholder="选择模型">
                   <el-option v-for="model in modelOptions" :key="model.id" :label="`${model.model_name}（${model.model_code}）`" :value="model.id" />
                 </el-select>
               </el-form-item>
-              <el-form-item label="提示词（可选）">
-                <el-select v-model="selectedDefinition.config.prompt_config_id" filterable clearable :loading="isLoadingPrompts" placeholder="不选择则仅使用上游上下文">
+              <el-form-item :label="selectedDefinition.type === 'intent_analysis' ? '补充提示词（可选）' : '提示词（可选）'">
+                <el-select v-model="selectedDefinition.config.prompt_config_id" filterable clearable :loading="isLoadingPrompts" :placeholder="selectedDefinition.type === 'intent_analysis' ? '不选择则使用内置意图分析说明' : '不选择则仅使用上游上下文'">
                   <el-option v-for="prompt in promptOptions" :key="prompt.id" :label="`${prompt.prompt_name}（ID：${prompt.id}）`" :value="prompt.id" />
                 </el-select>
               </el-form-item>
             </el-form>
             <el-alert v-if="modelError" :title="modelError" type="error" :closable="false"><el-button link type="primary" :disabled="isLoadingModels" @click="loadModels">重新加载模型</el-button></el-alert>
             <el-alert v-if="promptError" :title="promptError" type="error" :closable="false"><el-button link type="primary" :disabled="isLoadingPrompts" @click="loadPrompts">重新加载提示词</el-button></el-alert>
-            <p class="designer-hint">提示词作为当前模型的任务说明，正文在运行时读取；可清除选择。</p>
+            <p v-if="selectedDefinition.type === 'intent_analysis'" class="designer-hint">内置基础分类和 JSON 格式说明，可选提示词作为业务补充。输出 tasks 任务列表，类型为数据库查询、知识库检索、普通问答、暂不支持操作；本节点只分析需求。</p>
+            <p v-else class="designer-hint">提示词作为当前模型的任务说明，正文在运行时读取；可清除选择。</p>
             <p class="designer-hint">可直接连接多个上游，等待全部完成后按输入范围读取结果，由公共消息模板填入数据。</p>
           </template>
           <p v-else-if="selectedDefinition.type === 'merge'" class="designer-hint">将多个上游连到左侧圆点，等待全部完成后，按本节点的输入范围收集结果。</p>
           <p v-else-if="selectedDefinition.type === 'return'" class="designer-hint">把一个上游的最终处理结果返回给调用方。此节点不能连接下游；返回多路数据时先经过收敛节点。本次运行仍会等待其他支路完成。</p>
           <p v-else class="designer-hint">当前节点配置会保留，暂未提供配置面板。</p>
-          <el-form v-if="selectedDefinition.type === 'llm' || selectedDefinition.type === 'merge'" label-position="top" :disabled="!canEdit">
+          <el-form v-if="selectedDefinition.type === 'llm' || selectedDefinition.type === 'intent_analysis' || selectedDefinition.type === 'merge'" label-position="top" :disabled="!canEdit">
             <el-form-item label="输入范围">
               <el-select v-model="selectedInputScope">
                 <el-option label="全部上游数据" value="all_upstream" />

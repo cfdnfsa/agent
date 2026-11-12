@@ -3,6 +3,8 @@
 import json
 from typing import Any
 
+from pydantic_core import to_jsonable_python
+
 
 # ---------- 将业务数据转换成可读文字
 def convert_input_to_text(node_input: Any) -> str:
@@ -16,4 +18,5 @@ def convert_input_to_text(node_input: Any) -> str:
     """
     if isinstance(node_input, str):
         return node_input
-    return json.dumps(node_input, ensure_ascii=False)
+    # 框架序列化支持嵌套的 Pydantic 结果对象，意图结果也能继续交给普通 LLM 读取。
+    return json.dumps(to_jsonable_python(node_input), ensure_ascii=False)

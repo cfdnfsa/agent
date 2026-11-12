@@ -17,6 +17,7 @@
 - 流程固定结构使用 dataclass，通过对象属性访问，不再用 dict[str, Any] 隐藏已知字段。workflow_nodes/base/data/ 按对象维护节点定义、节点配置、输入和状态；workflow_runtime/data/ 维护流程连线、流程定义和结果。各处直接导入对应文件，不通过 __init__.py 转发，不重复定义或保留旧路径。类文档使用中文 Attributes 说明字段，便于 PyCharm 补全和快速文档；仅原始 HTTP/JSON 边界和可变业务内容保留 Any，按ID查找的字典继续使用明确的键、值类型。数据库模型沿用原实体，不增加重复映射对象或业务校验。
 - 流程运行输入固定使用 WorkflowInput：text: str 为本次文字，user_id: str | None = None 为预留用户ID。FastAPI 直接解析现有 dataclass，内部通过属性访问，不再用动态 payload 作为输入，不加重复请求DTO或额外业务校验。开始节点仅输出 text，用户ID保留在 state.inputs.user_id；节点输出和 WorkflowResult.payload 允许文字、对象或列表，JSON 对象直接返回，不先转成 JSON 字符串。
 - 当前按全新业务版本维护，删除功能时同步移除相关历史格式、参数别名和迁移分支，不为旧业务代码增加兼容层。
+- 意图分析使用独立 IntentAnalysisNode，复用模型、可选提示词和输入范围；内置分类说明，可选提示词作补充。普通 invoke 后使用 PydanticOutputParser 解析 tasks，类型为 database、knowledge、chat、unsupported；IntentTask、IntentAnalysisResult 为复用框架解析使用 Pydantic BaseModel，其余运行对象保持 dataclass。解析失败返回不含模型原文的业务错误，不自动重试、不分发任务。结果对象直接保留在 value，公共文字函数支持嵌套对象序列化。
 - LLM 可直接连接多个上游，direct_upstream 读取全部直接上游结果，由 LangGraph 列表连线等待它们完成；不强制插入收敛节点。收敛只负责把所选结果打包成对象，返回节点仍固定一个直接上游。
 - 流程定义顶层维护 start_node_id、return_node_id、nodes、edges；前端随节点增删维护两个ID，草稿缺少对应节点时为 null，后端运行时必须指定。运行模块直接读取ID，在准备上游列表的同一轮节点遍历中检查类型和唯一性，整理连线时检查返回节点只有一个上游且没有下游，不再单独扫描查找入口和返回节点；不符合时抛出公共 BusinessError。返回节点 type 为 return，由 ReturnNode 原样输出上游数据；图引擎入口使用 start_node_id: str，全部业务末端仍根据连线计算并使用列表。接口只读取 return_node_id 的输出，不自动聚合其他末端，也不回退到历史返回规则。其他支路可以独立结束，当前仍同步等待整次图完成，返回节点不代表后台执行。此项是明确要求的结构约束，保存接口仍按原文保存，不扩展其他业务校验。
 - 日志调用（如 logger.info、logger.error）统一写在一行，前后各留一个空行；参数之间正常保留空格，不因日志较长而拆成多行。

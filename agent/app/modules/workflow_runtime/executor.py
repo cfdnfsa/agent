@@ -97,7 +97,7 @@ def create_runtime_nodes(workflow_definition: WorkflowDefinition) -> list[BaseNo
     for definition in node_definitions:
         runtime_node = create_node(definition, incoming[definition.id])
         # 输入范围属于使用数据的节点，上游节点不会限制其他节点读取已保存的结果。
-        if definition.type in ("llm", "merge") and definition.config.input_scope != "direct_upstream":
+        if definition.type in ("llm", "intent_analysis", "merge") and definition.config.input_scope != "direct_upstream":
             runtime_node.input_ids = find_upstream_node_ids(definition.id, incoming)
         runtime_nodes.append(runtime_node)
 

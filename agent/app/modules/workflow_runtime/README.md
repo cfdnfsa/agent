@@ -1,6 +1,6 @@
 # 流程运行（极简版）
 
-本包负责统一加载配置、准备节点和选择返回数据，配置增删改查由 [workflow_config](../workflow_config/README.md) 维护，具体节点由同级 [workflow_nodes](../workflow_nodes/README.md) 提供，框架构建和执行集中在 [ai/langgraph](../../infrastructure/ai/langgraph/README.md)。当前提供开始、大模型、收敛、返回节点，前端只展示返回节点的数据，排查使用后端日志。
+本包负责统一加载配置、准备节点和选择返回数据，配置增删改查由 [workflow_config](../workflow_config/README.md) 维护，具体节点由同级 [workflow_nodes](../workflow_nodes/README.md) 提供，框架构建和执行集中在 [ai/langgraph](../../infrastructure/ai/langgraph/README.md)。当前提供开始、大模型、意图分析、收敛、返回节点，前端只展示返回节点的数据，排查使用后端日志。
 
 ## 文件职责
 
@@ -50,6 +50,8 @@ run_workflow 直接接收 WorkflowDefinition 和本次输入，不再打包流�
 固定结构使用标准库 dataclass，通过属性访问，例如 workflow_definition.nodes、node.config.model_config_id、result.payload。[workflow_nodes/base/data/](../workflow_nodes/base/data/README.md) 按对象保存节点定义、节点配置、WorkflowInput、WorkflowState；本包 [data/](data/README.md) 按对象维护 WorkflowEdge、WorkflowDefinition、WorkflowResult。每个类型只定义一次，各处直接导入所属文件，不维护旧路径转发。
 
 字段说明使用中文 Attributes，支持 PyCharm 补全和快速文档。实际业务内容可以是文字、对象或列表，因此只有动态内容及 HTTP/JSON 边界保留 Any；按ID索引的字典继续保留。
+
+意图分析也参与 input_scope 的输入ID准备。它的 IntentAnalysisResult、IntentTask 位于节点 node/data，使用 Pydantic BaseModel 直接复用框架 JSON 解析；NodeOutput.value 保留同一结果对象，统一返回会将它序列化为 tasks 对象，普通运行结构保持 dataclass。当前只分析任务，未接入条件路由或任务分发。
 
 WorkflowState 在 TYPE_CHECKING 块中声明 dataclass 自动生成的元信息，兼容 PyCharm 对 LangGraph 状态类型约束的识别。该声明不参与运行，图状态仍只有 inputs、node_outputs；不使用忽略检查或 Any 强制转换。
 

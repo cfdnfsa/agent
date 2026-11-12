@@ -12,7 +12,7 @@ class WorkflowNode:
 
     Attributes:
         id: 流程内唯一的节点ID，连线和执行定位使用它。
-        type: 节点类型，当前为 start、llm、merge 或 return。
+        type: 节点类型，当前为 start、llm、intent_analysis、merge 或 return。
         config: 当前节点的模型、可选提示词和输入范围。
         name: 用户填写的显示名称，未填写时日志使用 ID。
 

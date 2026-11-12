@@ -23,6 +23,8 @@ WorkflowNode.from_dict(node_data) 是类自己的创建入口，集中读取单�
 
 LLM 节点可保存 config.prompt_config_id，未选择时省略或为 null；这里只保存引用ID，完整提示词实体在 factory 创建节点时从缓存读取，正文不写入流程定义。各节点独立保存自己的选择。
 
+意图分析使用同一配置对象，type 为 intent_analysis，提示词作为内置规则之外的业务补充。其结果类位于 node/data，使用 Pydantic BaseModel 直接供框架解析；节点定义、输入和状态继续使用这里的 dataclass，不重复定义结果对象。
+
 WorkflowState 保留 TYPE_CHECKING 下的 dataclass 元信息声明，帮助 PyCharm 匹配 LangGraph 类型约束；运行时状态字段仍只有 inputs、node_outputs。
 
 节点公共执行入口见 [base_node.py](../base_node.py)，整体关系见 [节点包说明](../../README.md)。

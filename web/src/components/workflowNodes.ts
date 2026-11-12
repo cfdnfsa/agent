@@ -1,5 +1,5 @@
 /** 通用节点目录与流程结构；节点能力由代码维护，不新增工具箱表。 */
-export type WorkflowNodeType = 'start' | 'llm' | 'merge' | 'return'
+export type WorkflowNodeType = 'start' | 'llm' | 'intent_analysis' | 'merge' | 'return'
 export type InputScope = 'all_upstream' | 'direct_upstream'
 
 export interface WorkflowNodeConfig {
@@ -49,6 +49,7 @@ export interface WorkflowCanvasEdgeData {
 export const workflowNodeTypes: { type: WorkflowNodeType; label: string; description: string; badge: string }[] = [
   { type: 'start', label: '开始', description: '接收本次请求的输入', badge: '入' },
   { type: 'llm', label: '大模型', description: '处理上游传来的数据', badge: 'AI' },
+  { type: 'intent_analysis', label: '意图分析', description: '分析需求并输出任务列表', badge: '意' },
   { type: 'merge', label: '收敛', description: '等待全部上游并收集结果', badge: '合' },
   { type: 'return', label: '返回', description: '将上游数据返回给调用方', badge: '出' },
 ]

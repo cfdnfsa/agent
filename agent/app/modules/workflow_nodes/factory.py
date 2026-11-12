@@ -10,6 +10,7 @@ from app.modules.prompt_config.entity import PromptConfig
 from app.modules.workflow_nodes.base.base_node import BaseNode
 from app.modules.workflow_nodes.base.data.workflow_node import WorkflowNode
 from app.modules.workflow_nodes.node.data.llm_node_resources import LlmNodeResources
+from app.modules.workflow_nodes.node.intent_analysis_node import IntentAnalysisNode
 from app.modules.workflow_nodes.node.llm_node import LlmNode
 from app.modules.workflow_nodes.node.merge_node import MergeNode
 from app.modules.workflow_nodes.node.return_node import ReturnNode
@@ -35,6 +36,8 @@ def create_node(definition: WorkflowNode, source_ids: list[str]) -> BaseNode:
         return ReturnNode(definition, source_ids)
     if definition.type == "llm":
         return create_llm_node(definition, source_ids)
+    if definition.type == "intent_analysis":
+        return create_intent_analysis_node(definition, source_ids)
     raise BusinessError(f"尚不支持的流程节点类型：{definition.type}")
 
 
@@ -49,10 +52,38 @@ def create_llm_node(definition: WorkflowNode, source_ids: list[str]) -> LlmNode:
     Returns:
         已准备好调用配置的大模型节点。
     """
+    resources = load_llm_resources(definition)
+    return LlmNode(definition, source_ids, resources)
+
+
+# ---------- 准备配置并创建意图分析节点
+def create_intent_analysis_node(definition: WorkflowNode, source_ids: list[str]) -> IntentAnalysisNode:
+    """复用模型和可选提示词加载，专用节点负责固定的任务列表输出。
+
+    Args:
+        definition: 已保存的意图分析节点定义。
+        source_ids: 当前节点直接上游的ID列表。
+
+    Returns:
+        配置就绪的意图分析节点。
+    """
+    resources = load_llm_resources(definition)
+    return IntentAnalysisNode(definition, source_ids, resources)
+
+
+# ---------- 加载模型调用节点共用的资源
+def load_llm_resources(definition: WorkflowNode) -> LlmNodeResources:
+    """普通大模型和意图分析共用缓存入口，保留原实体，不复制配置字段。
+
+    Args:
+        definition: config 中保存了模型ID和可选提示词ID的节点定义。
+
+    Returns:
+        内部只读资源；缺少必需模型或已选提示词不存在时沿用原业务错误。
+    """
     model_config = load_model_config(definition.config.model_config_id)
     prompt_config = load_prompt_config(definition.config.prompt_config_id)
-    resources = LlmNodeResources(model_config=model_config, prompt_config=prompt_config)
-    return LlmNode(definition, source_ids, resources)
+    return LlmNodeResources(model_config=model_config, prompt_config=prompt_config)
 
 
 # ---------- 读取节点必需的模型配置

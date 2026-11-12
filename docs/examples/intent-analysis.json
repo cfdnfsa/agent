@@ -1,0 +1,13 @@
+{
+  "start_node_id": "start_1",
+  "return_node_id": "return_1",
+  "nodes": [
+    {"id": "start_1", "name": "用户需求", "type": "start", "position": {"x": 100, "y": 160}, "config": {}},
+    {"id": "intent_1", "name": "分析意图", "type": "intent_analysis", "position": {"x": 400, "y": 160}, "config": {"model_config_id": 1, "input_scope": "all_upstream"}},
+    {"id": "return_1", "name": "返回任务列表", "type": "return", "position": {"x": 700, "y": 160}, "config": {}}
+  ],
+  "edges": [
+    {"id": "start_to_intent", "source": "start_1", "target": "intent_1"},
+    {"id": "intent_to_return", "source": "intent_1", "target": "return_1"}
+  ]
+}

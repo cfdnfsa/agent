@@ -28,6 +28,8 @@ invoke 由框架提供，text 取得回复中的文本。问题原样传入，�
 
 输入范围由运行模块和节点公共层决定。本包只接收准备好的文字，不读取 WorkflowState，也不加载配置实体。流程节点的完整模型回复留在内部 LlmNodeOutput.message 中，默认业务结果仍是正文。
 
+意图分析节点也复用模型创建与消息模板，先使用普通 invoke，再由 LangChain 的 [PydanticOutputParser](https://reference.langchain.com/python/langchain-core/output_parsers/pydantic/PydanticOutputParser) 根据专用结果类解析任务列表。格式说明由框架生成，不依赖供应商的工具调用或原生 JSON Schema 接口；结果类与任务语义留在节点包，不在本包定义业务类型。
+
 ## 依赖与地址
 
 使用 langchain-core、langchain-openai、langchain-anthropic、langchain-ollama、langchain-google-genai。流程图的构建和执行集中在同级 [langgraph](../langgraph/README.md)，本包处理模型创建和消息模板；当前不增加 Agent 循环或记忆。

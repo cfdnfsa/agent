@@ -1,6 +1,6 @@
 # 最小流程与运行
 
-前端使用 Vue Flow，后台用 LangGraph 执行。当前提供开始、大模型、收敛、返回节点，页面只显示返回节点的数据，排查信息看后端日志。配置管理位于 workflow_config，执行位于 [workflow_runtime](../agent/app/modules/workflow_runtime/README.md)，具体节点位于同级 [workflow_nodes](../agent/app/modules/workflow_nodes/README.md)。串行示例见 [basic-chat.json](examples/basic-chat.json)，模型ID 1 需换成实际配置ID。
+前端使用 Vue Flow，后台用 LangGraph 执行。当前提供开始、大模型、意图分析、收敛、返回节点，页面只显示返回节点的数据，排查信息看后端日志。配置管理位于 workflow_config，执行位于 [workflow_runtime](../agent/app/modules/workflow_runtime/README.md)，具体节点位于同级 [workflow_nodes](../agent/app/modules/workflow_nodes/README.md)。示例见 [普通问答](examples/basic-chat.json) 和 [意图分析](examples/intent-analysis.json)，模型ID 1 需换成实际配置ID。
 
 ## 流程结构
 
@@ -26,6 +26,7 @@
 |---|---|---|
 | start | {} | 输出本次输入的 text；user_id 暂存在运行状态中，界面提供测试输入和运行按钮 |
 | llm | model_config_id、可选 prompt_config_id、input_scope | 按输入范围读取上游结果，公共模板组装用户消息，所选提示词作为可选系统消息 |
+| intent_analysis | model_config_id、可选 prompt_config_id、input_scope | 独立分析需求，输出包含 tasks 的对象；提示词是内置规则之外的业务补充 |
 | merge | 可选 input_scope | 等待全部直接上游，按输入范围收集结果 |
 | return | {} | 接收一个上游，只返回其最终业务结果；只能有一个，不能连接下游 |
 
@@ -35,7 +36,7 @@ LLM 的配置示例为 `{"model_config_id":1,"prompt_config_id":2,"input_scope":
 
 ## 输入范围
 
-LLM 和收敛节点可选择 config.input_scope，省略时默认 all_upstream：
+LLM、意图分析和收敛节点可选择 config.input_scope，省略时默认 all_upstream：
 
 - all_upstream（全部上游数据）：读取当前节点整条上游依赖链上的结果。
 - direct_upstream（直接上游结果）：只读取连线直接指向当前节点的结果。
@@ -63,12 +64,31 @@ WorkflowState.node_outputs 按节点ID统一保存 NodeOutput，value 为当前�
 ## 页面使用
 
 1. 新增流程，自带开始和返回节点；拖入大模型，按“开始 → 大模型 → 返回”连线，选择模型和可选提示词。也可直接连接“开始 → 返回”，原样返回输入。
-2. 选中节点可在右侧改名；LLM、收敛可选择输入范围；开始节点填写本次测试文字，可选填用户ID。
+2. 选中节点可在右侧改名；LLM、意图分析、收敛可选择输入范围；开始节点填写本次测试文字，可选填用户ID。
 3. 点击开始旁的 ▶ 或右侧运行按钮，页面自动保存画布，再执行并展示最终数据或错误。
 
 需要合并返回时，从开始节点分出多条连线，各分支连接收敛节点，再连接返回节点；收敛默认读取全部上游，也可以继续连接大模型。无需返回的支路可以独立结束，仍参与本次同步执行。
 
 全屏画布的工具箱、配置区可收起。测试文字、用户ID和结果只在页面内存中，刷新或离开后清除。打印节点、每步数据面板和 debug 查询参数已移除。
+
+## 意图分析最小闭环
+
+配置“开始 → 意图分析 → 返回”，选择实际模型即可运行，无需另外初始化提示词。节点内置分类和 JSON 结构说明，可选择提示词作为业务补充；当前只识别任务，不分发任务、不查询数据库或知识库。
+
+返回的 payload 是对象，例如：
+
+```json
+{
+  "tasks": [
+    {"type": "database", "question": "查询今天的检查结果"},
+    {"type": "knowledge", "question": "查询检查前的注意事项"}
+  ]
+}
+```
+
+任务类型固定为 database（数据查询）、knowledge（资料检索）、chat（普通问答或待澄清问题）、unsupported（当前不支持的操作，如修改业务数据）。同一需求可拆出多项任务。普通 invoke 后由 PydanticOutputParser 解析为固定结果对象，不要求模型支持工具调用；结构不符合时返回“意图分析结果格式不正确，请检查模型或补充提示词”，不增加自动重试。实际分类效果需使用所选模型运行确认。
+
+结果对象可通过 result.tasks、task.type、task.question 读取，也可继续交给下游 LLM；公共文字函数负责嵌套对象的 JSON 序列化。意图结果使用 Pydantic BaseModel 以复用框架解析，普通节点定义和状态仍为 dataclass，表结构不变。
 
 ## HTTP 与日志
 
