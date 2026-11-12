@@ -51,10 +51,6 @@ class WorkflowNode:
         return cls(
             id=node_data["id"],
             type=node_data["type"],
-            config=WorkflowNodeConfig(
-                model_config_id=node_data["config"].get("model_config_id"),
-                prompt_config_id=node_data["config"].get("prompt_config_id"),
-                input_scope=node_data["config"].get("input_scope", "all_upstream"),
-            ),
+            config=WorkflowNodeConfig.from_dict(node_data["config"]),
             name=node_data.get("name"),
         )

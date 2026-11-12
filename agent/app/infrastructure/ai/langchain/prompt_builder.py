@@ -7,7 +7,7 @@ from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplat
 
 # ---------- 使用公共模板组装模型输入
 def build_chat_prompt(context_text: str, system_prompt: str | None) -> ChatPromptValue:
-    """只填充公共模板变量；数据库中的提示词正文作为完整消息原样使用。
+    """只填充公共消息模板；调用方准备好的系统文字整体使用，不二次解析。
 
     Args:
         context_text: 调用方已选好并转换成文字的上游上下文，不在这里读取流程状态。

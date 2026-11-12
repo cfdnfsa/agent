@@ -31,5 +31,7 @@ const badge = computed(() => workflowNodeTypes.find(item => item.type === nodeTy
 .run-trigger { position: absolute; right: calc(100% + 9px); top: 22px; width: 30px; height: 30px; border: 1px solid #67c23a; border-radius: 6px; color: #529b2e; background: #f0f9eb; cursor: pointer; }
 .run-trigger:disabled { opacity: 0.5; cursor: default; }
 .workflow-node-id { margin-top: 9px; color: #909399; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.workflow-node :deep(.vue-flow__handle) { width: 9px; height: 9px; border: 2px solid #fff; background: var(--el-color-primary); }
+.workflow-node :deep(.vue-flow__handle) { width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; cursor: crosshair; }
+.workflow-node :deep(.vue-flow__handle)::after { content: ''; position: absolute; inset: 7px; border: 2px solid #fff; border-radius: 50%; background: var(--el-color-primary); pointer-events: none; transition: box-shadow 0.15s; }
+.workflow-node :deep(.vue-flow__handle:hover)::after, .workflow-node :deep(.vue-flow__handle.connecting)::after { box-shadow: 0 0 0 4px var(--el-color-primary-light-8); }
 </style>

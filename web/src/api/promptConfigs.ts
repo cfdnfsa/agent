@@ -25,6 +25,16 @@ export function listPromptConfigs(page: number, pageSize: number): Promise<Promp
   return request(`/api/prompt-configs?page=${page}&page_size=${pageSize}`)
 }
 
+/** 选择弹窗与节点名称展示共用概要读取，不预取所有正文。 */
+export async function listAllPromptConfigs(): Promise<PromptConfigSummary[]> {
+  const firstPage = await listPromptConfigs(1, 100)
+  const prompts = [...firstPage.items]
+  for (let page = 2; page <= Math.ceil(firstPage.total / 100); page++) {
+    prompts.push(...(await listPromptConfigs(page, 100)).items)
+  }
+  return prompts
+}
+
 /** 读取完整提示词，供编辑与只读详情使用。 */
 export function getPromptConfig(promptId: number): Promise<PromptConfig> {
   return request(`/api/prompt-configs/${promptId}`)

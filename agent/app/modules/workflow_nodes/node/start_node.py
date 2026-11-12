@@ -15,7 +15,7 @@ class StartNode(BaseNode):
 
         用户ID继续保留在 state.inputs.user_id 中，不自动传入模型。
         """
-        return NodeContext(results={self.definition.id: state.inputs.text})
+        return NodeContext(results={self.definition.id: state.inputs.text}, question=state.inputs.text)
 
     # ---------- 输出开始节点的数据
     def execute(self, node_input: NodeContext) -> NodeOutput:

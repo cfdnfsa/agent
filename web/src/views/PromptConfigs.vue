@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import PromptEditorFields from '../components/PromptEditorFields.vue'
+import { builtinPromptVariables, preparePromptVariable } from '../components/promptVariables'
 import {
   deletePromptConfig, getPromptConfig, listPromptConfigs, savePromptConfig,
   type PromptConfigRequest, type PromptConfigSummary,
@@ -26,6 +28,7 @@ const isFormReady = ref(false)
 const editingPromptId = ref<number | null>(null)
 const deletingPrompt = ref<PromptConfigSummary | null>(null)
 const promptForm = reactive<PromptConfigRequest>({ prompt_name: '', prompt_content: '' })
+const promptEditor = ref<InstanceType<typeof PromptEditorFields>>()
 const canSubmit = computed(() => isFormReady.value && !isReadOnly.value && !isBusy.value)
 const editorTitle = computed(() => {
   if (isReadOnly.value) {
@@ -45,6 +48,14 @@ const emptyDescription = computed(() => {
   }
   return '还没有提示词配置，添加第一个提示词吧'
 })
+
+/** 管理页也通过菜单插入内置变量，具体上游来源在流程节点中选择。 */
+function insertPromptVariable(key: string): void {
+  const option = builtinPromptVariables.find(item => item.key === key)
+  if (!option || isReadOnly.value || isBusy.value) return
+  const prepared = preparePromptVariable(promptForm.prompt_content, {}, option)
+  void promptEditor.value?.insertVariable(`{${prepared.name}}`)
+}
 
 /** 沿用接口的公开错误说明，未知错误使用统一提示。 */
 function errorMessage(error: unknown): string {
@@ -247,12 +258,7 @@ onMounted(() => loadPrompts())
       id="prompt-config-form" v-loading="isLoadingDetail" :model="promptForm" label-position="top"
       :disabled="isSaving || isLoadingDetail || !isFormReady" novalidate @submit.prevent="submitPrompt"
     >
-      <el-form-item label="提示词名称" prop="prompt_name">
-        <el-input v-model="promptForm.prompt_name" :readonly="isReadOnly" placeholder="例如：问题分析助手" />
-      </el-form-item>
-      <el-form-item label="提示词正文" prop="prompt_content">
-        <el-input v-model="promptForm.prompt_content" type="textarea" :rows="12" :readonly="isReadOnly" placeholder="输入提示词内容" />
-      </el-form-item>
+      <PromptEditorFields :key="`${editingPromptId}-${isReadOnly}-${isEditorVisible}`" ref="promptEditor" v-model:name="promptForm.prompt_name" v-model:content="promptForm.prompt_content" :readonly="isReadOnly" :disabled="isSaving || isLoadingDetail || !isFormReady" @insert-variable="insertPromptVariable" />
     </el-form>
     <el-alert v-if="formError" :title="formError" type="error" :closable="false" show-icon>
       <el-button v-if="!isFormReady && editingPromptId !== null" link type="primary" :disabled="isBusy" @click="loadPromptDetail">重新加载</el-button>

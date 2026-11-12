@@ -7,6 +7,7 @@ from app.infrastructure.ai.langchain.prompt_builder import build_chat_prompt
 from app.modules.workflow_nodes.base.base_node import BaseNode
 from app.modules.workflow_nodes.base.data.node_context import NodeContext
 from app.modules.workflow_nodes.base.data.workflow_node import WorkflowNode
+from app.modules.workflow_nodes.base.prompt_variables import render_prompt_variables
 from app.modules.workflow_nodes.base.text import convert_input_to_text
 from app.modules.workflow_nodes.node.data.llm_node_output import LlmNodeOutput
 from app.modules.workflow_nodes.node.data.llm_node_resources import LlmNodeResources
@@ -58,10 +59,12 @@ class LlmNode(BaseNode):
             node_input: 当前节点实际收到的数据，不直接读取全局状态中的其他输出。
 
         Returns:
-            LangChain 模型输入；选择提示词时增加原文系统消息，未选择时只有用户消息。
+            LangChain 模型输入；选择提示词时增加变量替换后的系统消息，未选择时只有用户消息。
         """
         input_text = convert_input_to_text(node_input.results)
         system_prompt = None
         if self.resources.prompt_config is not None:
-            system_prompt = self.resources.prompt_config.prompt_content
+            system_prompt = render_prompt_variables(
+                self.resources.prompt_config.prompt_content, self.definition.config.prompt_variables, node_input,
+            )
         return build_chat_prompt(input_text, system_prompt)

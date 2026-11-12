@@ -13,7 +13,7 @@ class ReturnNode(BaseNode):
     def read_input(self, state: WorkflowState) -> NodeContext:
         """运行模块已确认恰好一个上游；接口只取其 value，不自动返回其他节点记录。"""
         source_id = self.source_ids[0]
-        return NodeContext(results={source_id: state.node_outputs[source_id].value})
+        return NodeContext(results={source_id: state.node_outputs[source_id].value}, question=state.inputs.text)
 
     # ---------- 输出本次流程需要返回的数据
     def execute(self, node_input: NodeContext) -> NodeOutput:

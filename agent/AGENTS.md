@@ -7,7 +7,7 @@
 - 流程配置保持三个字段：`id`、`workflow_name`、`workflow_definition`。定义按普通文本原样保存，不使用数据库 JSON/JSONB 类型，保存时不解析或校验流程，运行时再解析；列表只查询 ID、名称，详情才读取定义。公共 Base 仅提供 id，当前模型配置和流程配置均不维护创建时间、更新时间，不默认增加时间字段。
 - workflow_config 只负责配置增删改查；workflow_runtime 加载入口只返回 WorkflowDefinition，负责准备节点和返回策略，不再打包流程与模型 Map；同级 workflow_nodes 的 base 子包维护基类和共用数据，node 子包维护具体节点，factory.py 按类型创建节点，模型与可选提示词从各自缓存统一入口按需读取。节点实现的 run、execute 和 AI 图引擎不查库，配置准备阶段的短查询会话在执行图前关闭。页面只返回最终数据；排查使用后端日志，模型配置、Key 和提示词正文不输出，节点输入输出正文只在 DEBUG 级别记录。
 - 模型配置使用进程内 dict[int, ModelConfig] 缓存：get_model_config 命中直接返回完整实体，未命中自行开启短会话读取，关闭会话后缓存，不缓存 Session 或 None。流程节点创建、模型测试、调试台共用此入口；列表详情保持原数据库查询和 Key 排除规则。缓存实体仅内部只读，CRUD 使用独立请求会话查询实体，事务提交成功后使对应缓存失效；不增加 Redis、TTL 或重复配置 DTO。
-- 提示词配置沿用模型配置的按需缓存规则，入口为 prompt_config/cache.py 的 get_prompt_config，保存 dict[int, PromptConfig] 完整实体；命中直接返回，未命中用短会话查库，关闭会话后缓存，不缓存 Session 或 None。管理列表、详情仍直接查库；增删改提交成功后清除对应缓存，修改主键时同时清除旧ID和新ID。LLM 节点通过可选 config.prompt_config_id 引用，由 factory 读取完整实体，只供内部只读使用；记录不存在返回 404，未选择时不添加系统消息。选中正文原样作为 SystemMessage，不解析正文花括号；上游上下文由公共 ChatPromptTemplate 填入用户消息，不增加跨请求历史。
+- 提示词配置沿用模型配置的按需缓存规则，入口为 prompt_config/cache.py 的 get_prompt_config，保存 dict[int, PromptConfig] 完整实体；命中直接返回，未命中用短会话查库，关闭会话后缓存，不缓存 Session 或 None。管理列表、详情仍直接查库；增删改提交成功后清除对应缓存，修改主键时同时清除旧ID和新ID。LLM 节点通过可选 config.prompt_config_id 引用，由 factory 读取完整实体，只供内部只读使用；记录不存在返回 404，未选择时不添加系统消息。选中正文由节点公共层替换命名变量后作为 SystemMessage，普通 JSON 花括号保持原样；上游上下文由公共 ChatPromptTemplate 填入用户消息，不增加跨请求历史。
 - 节点使用“统一保存、按需读取”：WorkflowState 保存全部 NodeOutput，输出只保存当前结果，不维护下游上下文。execute 接收 NodeContext 并返回 NodeOutput；config.input_scope 默认 all_upstream（全部上游数据），direct_upstream 仅读取直接上游。运行模块准备 input_ids，节点执行时按ID读取，不混入无关分支；每个节点独立选择，不能裁剪或删除其他节点结果。返回节点只取直接上游 value；LLM 的 LlmNodeOutput.message 保留完整模型回复，仅内部使用，默认 value 为正文。文字转换放 base/text.py，消息模板放 infrastructure/ai/langchain/prompt_builder.py；不增加表、跨请求记忆或输出格式枚举。
 - AI 框架能力集中在 infrastructure/ai：langgraph/engine.py 使用 StateGraph、连线、编译和执行，接收现有 BaseNode、WorkflowState 和入口末端ID，只返回各节点输出，不查询配置或决定 HTTP 返回；langchain/model_client.py 创建模型，供模型测试、调试台和大模型节点复用，prompt_builder.py 只通过框架模板组装准备好的文字。图引擎只依赖节点 base 契约，不引用运行 Service、Repository 或 HTTP；不增加重复节点 DTO、旧路径转发或额外引擎接口。MCP、Skills、工具等实际接入时再创建目录，配置管理仍放 modules。
 - 流程节点采用 BaseNode + 具体节点对象：run 统一读取输入、记录日志、提交输出，execute 实现自身业务，create_node 普通函数选择类型。业务执行器只准备节点、入口末端并选择返回结果，框架代码集中在 ai/langgraph 引擎，不自建调度器；并行收敛使用列表形式 add_edge 等待全部上游，收敛结果按上游ID保存。节点ID由画布创建并持久化，运行时不重新生成；节点对象仅保存配置，每次运行的数据放在 WorkflowState。当前只支持固定并行分支，不提前增加条件分支、循环、后台任务或会话记忆。
@@ -32,3 +32,5 @@
 - 主要功能包维护自己的 `README.md`，说明职责、文件入口、调用关系和关键约定。修改包职责、配置、接口或行为时，同步更新对应文档；新增主要功能包时一并补充文档。
 - `Python学习指南.md` 保持简短，仅按用户明确要求补充学习内容，优先用当前项目示例和 Spring 对照，不自动扩展成完整教程。
 - 文档和示例不得包含真实数据库密码或 API Key；本地连接凭证保存在被 Git 忽略的 `.env` 中。
+
+- 提示词变量通过界面选择并自动插入，来源配置放当前节点 prompt_variables，表结构不变。question 取本次问题，upstream 取选中输入范围，其他名称绑定该范围内的节点完整结果。只处理命名占位符，普通 JSON、双花括号保留；不递归替换值，不缓存渲染结果。缺少来源明确报错，意图节点只渲染补充正文，不解析内置和框架说明。

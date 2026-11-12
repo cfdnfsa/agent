@@ -28,6 +28,8 @@ declare module 'vue' {
     ElTable: typeof import('element-plus/es')['ElTable']
     ElTableColumn: typeof import('element-plus/es')['ElTableColumn']
     ElTag: typeof import('element-plus/es')['ElTag']
+    PromptEditorFields: typeof import('./components/PromptEditorFields.vue')['default']
+    PromptPickerDialog: typeof import('./components/PromptPickerDialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     WorkflowCanvasNode: typeof import('./components/WorkflowCanvasNode.vue')['default']

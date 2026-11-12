@@ -23,3 +23,5 @@ WorkflowDefinition 顶层包含 start_node_id、return_node_id、nodes、edges�
 WorkflowNodeConfig 为 LLM 保存 model_config_id 和可选 prompt_config_id。提示词的选择、清除和加载反馈由画布页负责，节点卡片继续只显示节点名称、类型和ID。
 
 意图分析类型为 intent_analysis，卡片徽标为“意”，与普通 LLM 共用模型和提示词字段；提示词作为补充说明，任务结构由后端内置。结果使用现有 JSON 展示，不额外解析为另一套对象。
+
+PromptPickerDialog.vue 提供选择、正文预览、直接 CRUD 和节点变量来源选择；点击使用才应用引用及绑定。PromptEditorFields.vue 由该弹窗和提示词管理页共用，从菜单点选后在光标处插入变量；管理页提供本次问题与全部上游，流程弹窗增加具体上游节点。promptVariables.ts 统一识别命名变量并自动生成节点变量名，绑定放 config.prompt_variables，不保存在公共模板表。连线 Handle 操作区为28px，中心圆点14px，画布吸附半径32。

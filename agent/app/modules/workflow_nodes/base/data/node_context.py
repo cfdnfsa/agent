@@ -11,6 +11,8 @@ class NodeContext:
     Attributes:
         results: 节点ID到业务结果的映射，结果允许文字、对象或列表。
             只包含选中的直接或全部上游，不包含无关分支或跨请求历史。
+        question: 本次请求的原始问题，供用户选择“本次问题”变量使用。
     """
 
     results: dict[str, Any] = field(default_factory=dict)
+    question: str = ""

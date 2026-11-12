@@ -9,6 +9,7 @@
 | 文件 | 职责 |
 |---|---|
 | base/base_node.py | BaseNode.run 按输入范围读取数据、调用 execute、记录日志、保存 NodeOutput |
+| base/prompt_variables.py | 按当前节点来源配置替换命名变量，不修改缓存原文 |
 | base/text.py | 公共文字转换，文字原样保留，对象和列表转为 JSON 文字 |
 | node/start_node.py | StartNode 读取 inputs.text，原样交给下游；user_id 留在运行状态中 |
 | node/llm_node.py | LlmNode 从 resources 读取模型和可选提示词，调用 LangChain invoke |
@@ -29,7 +30,7 @@ factory.py 内按小方法分工：create_node 选择类型，create_llm_node、
 
 - 大模型可直接连接多个上游，由 LangGraph 等待全部直接上游完成。统一结果保存在 WorkflowState，NodeContext.results 只是当前节点按配置选出的输入，公共文字函数按需转换成 JSON 文字。收敛节点用于把选中的结果整理成一个对象，不是多路连线的必经节点。
 - config.input_scope 默认 all_upstream，读取全部上游依赖链；direct_upstream 仅读取直接上游。例如 a → b → d，d 选 direct_upstream 就只使用 b，后续节点仍可独立选择读取 a。运行模块提前计算 input_ids，执行时只按ID取值；无关分支不进入输入。
-- LLM 的 config 可保存 prompt_config_id，省略或为 null 时不添加系统消息。选中后 factory 通过 get_prompt_config 读取实体，找不到返回 HTTP 404；提示词正文原样作为 SystemMessage。ai/langchain/prompt_builder.py 使用 ChatPromptTemplate，将上游 JSON 文字填入固定用户消息，不替换数据库提示词中的花括号，也不增加跨请求历史。每个节点独立选择提示词。
+- LLM 的 config 可保存 prompt_config_id，省略或为 null 时不添加系统消息。选中后 factory 通过 get_prompt_config 读取实体，找不到返回 HTTP 404；提示词按当前节点 config.prompt_variables 替换命名变量后作为 SystemMessage。ai/langchain/prompt_builder.py 使用 ChatPromptTemplate，将上游 JSON 文字填入固定用户消息，普通 JSON 花括号保留，缺少变量来源明确报错；不缓存渲染结果，也不增加跨请求历史。每个节点独立选择提示词。
 - 意图分析类型为 intent_analysis，配置同样使用 model_config_id、可选 prompt_config_id 和 input_scope。节点自带分类与输出说明，选中的提示词作为原文业务补充；普通 invoke 后由 PydanticOutputParser 解析为 IntentAnalysisResult，tasks 每项包含 type、question。类型为 database、knowledge、chat、unsupported；这只是任务识别，不执行查询或分发。格式解析失败返回业务错误，不伪装成空结果。
 - IntentTask、IntentAnalysisResult 为直接复用框架解析而使用 Pydantic BaseModel，一类一文件；其余运行结构继续使用 dataclass。公共文字函数支持嵌套结果对象，意图结果既可直接返回，也可继续供普通 LLM 读取。示例见 [intent-analysis.json](../../../../docs/examples/intent-analysis.json)，模型ID需按实际配置修改。
 - NodeOutput.value 是当前业务结果，输出对象不保存下游上下文。LlmNodeOutput 供模型节点共用，普通 LLM 的 value 是正文，意图分析的 value 是任务对象；另存的原始 message 不自动进入模型输入或响应。

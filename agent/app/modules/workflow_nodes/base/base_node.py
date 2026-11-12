@@ -62,7 +62,7 @@ class BaseNode:
         Returns:
             当前节点的输入上下文；不修改其他节点已经保存的结果。
         """
-        node_input = NodeContext()
+        node_input = NodeContext(question=state.inputs.text)
         for input_id in self.input_ids:
             node_input.results[input_id] = state.node_outputs[input_id].value
         return node_input

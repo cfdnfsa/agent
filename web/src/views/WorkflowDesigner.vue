@@ -5,17 +5,19 @@ import { MarkerType, VueFlow, useVueFlow, type Connection, type Edge, type Node,
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import WorkflowCanvasNode from '../components/WorkflowCanvasNode.vue'
+import PromptPickerDialog from '../components/PromptPickerDialog.vue'
+import { builtinPromptVariables, type PromptVariableOption } from '../components/promptVariables'
 import {
   workflowNodeLabel, workflowNodeTypes,
-  type InputScope, type WorkflowCanvasEdgeData, type WorkflowCanvasNodeData, type WorkflowDefinition, type WorkflowNodeConfig, type WorkflowNodeType,
+  type InputScope, type PromptVariableBinding, type WorkflowCanvasEdgeData, type WorkflowCanvasNodeData, type WorkflowDefinition, type WorkflowNodeConfig, type WorkflowNodeType,
 } from '../components/workflowNodes'
 import { getWorkflowConfig, runWorkflowConfig, saveWorkflowConfig, type WorkflowInput, type WorkflowResult } from '../api/workflowConfigs'
 import { listModelConfigs, type ModelConfig } from '../api/modelConfigs'
-import { listPromptConfigs, type PromptConfigSummary } from '../api/promptConfigs'
+import { listAllPromptConfigs, type PromptConfigSummary } from '../api/promptConfigs'
 
 const route = useRoute()
 const router = useRouter()
-const { screenToFlowCoordinate, fitView, removeNodes, removeEdges } = useVueFlow({ id: 'workflow-designer' })
+const { screenToFlowCoordinate, fitView, removeNodes, removeEdges } = useVueFlow('workflow-designer')
 // 画布类型含递归组件定义，使用浅层引用；节点配置本身单独保持响应式。
 const nodes = shallowRef<Node<WorkflowCanvasNodeData>[]>([])
 const edges = shallowRef<Edge<WorkflowCanvasEdgeData>[]>([])
@@ -44,6 +46,8 @@ const workflowInput = reactive<WorkflowInput>({ text: '', user_id: null })
 const runResult = ref<WorkflowResult | null>(null)
 const showToolbox = ref(true)
 const showSettings = ref(true)
+const isPromptDialogVisible = ref(false)
+const promptDialogNodeId = ref<string | null>(null)
 const isReadOnly = computed(() => route.query.readonly === '1')
 const isBusy = computed(() => isLoading.value || isSaving.value || isRunning.value)
 const canEdit = computed(() => !isReadOnly.value && !isBusy.value && !loadError.value && !definitionError.value)
@@ -54,6 +58,39 @@ const startNodeId = computed(() => startNodes.value[0]?.id ?? null)
 const returnNodeId = computed(() => returnNodes.value[0]?.id ?? null)
 const canRun = computed(() => canEdit.value && startNodes.value.length === 1 && returnNodes.value.length === 1)
 const selectedDefinition = computed(() => nodes.value.find(node => node.id === selectedNodeId.value)?.data?.definition ?? null)
+const promptDialogNode = computed(() => nodes.value.find(node => node.id === promptDialogNodeId.value)?.data?.definition ?? null)
+const selectedPromptName = computed(() => {
+  const promptId = selectedDefinition.value?.config.prompt_config_id
+  if (promptId === null || promptId === undefined) return '未选择提示词'
+  return promptOptions.value.find(prompt => prompt.id === promptId)?.prompt_name ?? `提示词 ID：${promptId}`
+})
+// 变量选项只展示当前节点实际可读取的上游，名称用于展示，绑定保存稳定ID。
+const promptVariableOptions = computed<PromptVariableOption[]>(() => {
+  const options = [...builtinPromptVariables]
+  const definition = promptDialogNode.value
+  if (!definition) return options
+  const sourceIds = edges.value.filter(edge => edge.target === definition.id).map(edge => edge.source)
+  const pending = [...sourceIds]
+  const visited = new Set<string>([definition.id])
+  const inputIds = new Set<string>()
+  while (pending.length) {
+    const nodeId = pending.pop()!
+    if (visited.has(nodeId)) continue
+    visited.add(nodeId)
+    inputIds.add(nodeId)
+    if (definition.config.input_scope !== 'direct_upstream') {
+      for (const edge of edges.value) {
+        if (edge.target === nodeId) pending.push(edge.source)
+      }
+    }
+  }
+  for (const node of nodes.value) {
+    if (inputIds.has(node.id)) {
+      options.push({ key: `node:${node.id}`, label: `上游：${node.data?.definition.name || workflowNodeLabel(node.data?.definition.type ?? '')}（${node.id}）`, binding: { source: 'node', node_id: node.id } })
+    }
+  }
+  return options
+})
 // 未填写时默认读取全部上游；只有用户选择后才更新该节点的配置。
 const selectedInputScope = computed<InputScope>({
   get() {
@@ -113,6 +150,8 @@ async function applyDefinition(): Promise<void> {
 
 /** 新流程自带开始和返回节点，由用户连线；已有流程原样读取完整定义。 */
 async function loadWorkflow(): Promise<void> {
+  isPromptDialogVisible.value = false
+  promptDialogNodeId.value = null
   isLoading.value = true
   loadError.value = ''
   definitionError.value = ''
@@ -171,13 +210,7 @@ async function loadPrompts(): Promise<void> {
   isLoadingPrompts.value = true
   promptError.value = ''
   try {
-    const firstPage = await listPromptConfigs(1, 100)
-    const prompts = [...firstPage.items]
-    for (let page = 2; page <= Math.ceil(firstPage.total / 100); page++) {
-      const nextPage = await listPromptConfigs(page, 100)
-      prompts.push(...nextPage.items)
-    }
-    promptOptions.value = prompts
+    promptOptions.value = await listAllPromptConfigs()
   } catch (error) {
     promptError.value = errorMessage(error)
   } finally {
@@ -246,6 +279,25 @@ function selectNode(nodeId: string): void {
   selectedNodeId.value = nodeId
   selectedEdgeId.value = null
   showSettings.value = true
+}
+
+/** 打开独立选择草稿，取消不会改动当前节点的提示词引用。 */
+function openPromptDialog(): void {
+  if (isBusy.value || !selectedDefinition.value) return
+  promptDialogNodeId.value = selectedDefinition.value.id
+  isPromptDialogVisible.value = true
+}
+
+function applyPromptSelection(selection: { promptId: number; variables: Record<string, PromptVariableBinding> }): void {
+  if (!canEdit.value || !promptDialogNode.value) return
+  promptDialogNode.value.config.prompt_config_id = selection.promptId
+  promptDialogNode.value.config.prompt_variables = selection.variables
+}
+
+function clearPrompt(): void {
+  if (!canEdit.value || !selectedDefinition.value) return
+  selectedDefinition.value.config.prompt_config_id = null
+  selectedDefinition.value.config.prompt_variables = {}
 }
 
 /** 删除节点时同时删除关联连线，运行和详情模式禁止修改。 */
@@ -348,7 +400,7 @@ onMounted(() => { void loadWorkflow(); void loadModels(); void loadPrompts() })
       <section class="designer-canvas" @drop="dropNode" @dragover.prevent>
         <VueFlow
           id="workflow-designer" v-model:nodes="nodes" v-model:edges="edges" fit-view-on-init
-          :nodes-draggable="canEdit" :nodes-connectable="canEdit" :edges-updatable="false" :delete-key-code="canEdit ? 'Delete' : null"
+          :nodes-draggable="canEdit" :nodes-connectable="canEdit" :connection-radius="32" :edges-updatable="false" :delete-key-code="canEdit ? 'Delete' : null"
           @connect="connectNodes" @node-click="({ node }) => selectNode(node.id)"
           @edge-click="({ edge }) => { selectedEdgeId = edge.id; selectedNodeId = null }"
           @pane-click="() => { selectedNodeId = null; selectedEdgeId = null }"
@@ -386,12 +438,13 @@ onMounted(() => { void loadWorkflow(); void loadModels(); void loadPrompts() })
                   <el-option v-for="model in modelOptions" :key="model.id" :label="`${model.model_name}（${model.model_code}）`" :value="model.id" />
                 </el-select>
               </el-form-item>
-              <el-form-item :label="selectedDefinition.type === 'intent_analysis' ? '补充提示词（可选）' : '提示词（可选）'">
-                <el-select v-model="selectedDefinition.config.prompt_config_id" filterable clearable :loading="isLoadingPrompts" :placeholder="selectedDefinition.type === 'intent_analysis' ? '不选择则使用内置意图分析说明' : '不选择则仅使用上游上下文'">
-                  <el-option v-for="prompt in promptOptions" :key="prompt.id" :label="`${prompt.prompt_name}（ID：${prompt.id}）`" :value="prompt.id" />
-                </el-select>
-              </el-form-item>
             </el-form>
+            <label class="input-label">{{ selectedDefinition.type === 'intent_analysis' ? '补充提示词（可选）' : '提示词（可选）' }}</label>
+            <p class="selected-prompt-name">{{ selectedPromptName }}</p>
+            <div class="prompt-actions">
+              <el-button :disabled="isBusy" @click="openPromptDialog">{{ isReadOnly ? '查看提示词' : '选择 / 管理提示词' }}</el-button>
+              <el-button v-if="!isReadOnly" link :disabled="!canEdit || selectedDefinition.config.prompt_config_id == null" @click="clearPrompt">清除</el-button>
+            </div>
             <el-alert v-if="modelError" :title="modelError" type="error" :closable="false"><el-button link type="primary" :disabled="isLoadingModels" @click="loadModels">重新加载模型</el-button></el-alert>
             <el-alert v-if="promptError" :title="promptError" type="error" :closable="false"><el-button link type="primary" :disabled="isLoadingPrompts" @click="loadPrompts">重新加载提示词</el-button></el-alert>
             <p v-if="selectedDefinition.type === 'intent_analysis'" class="designer-hint">内置基础分类和 JSON 格式说明，可选提示词作为业务补充。输出 tasks 任务列表，类型为数据库查询、知识库检索、普通问答、暂不支持操作；本节点只分析需求。</p>
@@ -431,6 +484,7 @@ onMounted(() => { void loadWorkflow(); void loadModels(); void loadPrompts() })
         <pre v-else-if="runResult">{{ formatData(runResult.payload) }}</pre>
       </div>
     </section>
+    <PromptPickerDialog v-if="promptDialogNode" v-model="isPromptDialogVisible" :prompt-id="promptDialogNode.config.prompt_config_id ?? null" :variables="promptDialogNode.config.prompt_variables ?? {}" :variable-options="promptVariableOptions" :readonly="isReadOnly || !canEdit" @apply="applyPromptSelection" @changed="loadPrompts" />
   </div>
 </template>
 
@@ -458,6 +512,8 @@ onMounted(() => { void loadWorkflow(); void loadModels(); void loadPrompts() })
 .canvas-empty { position: absolute; inset: 0; display: grid; place-items: center; color: #909399; font-size: 13px; pointer-events: none; }
 .designer-node-id { font-size: 11px; color: #909399; line-height: 1.8; overflow-wrap: anywhere; }
 .input-label { display: block; margin: 16px 0 10px; font-size: 13px; }
+.selected-prompt-name { margin: 0 0 10px; font-size: 13px; overflow-wrap: anywhere; }
+.prompt-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .definition-recovery { margin-top: 20px; }
 .definition-recovery .el-textarea { margin: 12px 0; }
 .run-result { flex-shrink: 0; height: 26vh; min-height: 120px; max-height: 40vh; display: flex; flex-direction: column; border-top: 1px solid #e4e7ed; }

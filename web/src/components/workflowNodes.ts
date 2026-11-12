@@ -2,12 +2,19 @@
 export type WorkflowNodeType = 'start' | 'llm' | 'intent_analysis' | 'merge' | 'return'
 export type InputScope = 'all_upstream' | 'direct_upstream'
 
+export interface PromptVariableBinding {
+  source: 'question' | 'upstream' | 'node'
+  node_id?: string | null
+}
+
 export interface WorkflowNodeConfig {
   model_config_id?: number | null
   /** 可选提示词配置ID，正文由后端运行时读取。 */
   prompt_config_id?: number | null
   /** 当前节点读取全部上游（默认），或只读取直接上游的结果。 */
   input_scope?: InputScope
+  /** 变量通过界面选择来源，只保存来源配置，不保存运行数据。 */
+  prompt_variables?: Record<string, PromptVariableBinding>
   [key: string]: unknown
 }
 

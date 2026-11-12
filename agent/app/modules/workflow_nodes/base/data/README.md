@@ -5,10 +5,11 @@
 | 文件 | 对象 | 用途 |
 |---|---|---|
 | workflow_input.py | WorkflowInput | 固定输入 text 与可选 user_id，可通过属性补全读取 |
-| workflow_node_config.py | WorkflowNodeConfig | model_config_id、可选 prompt_config_id、input_scope |
+| workflow_node_config.py | WorkflowNodeConfig | model_config_id、可选 prompt_config_id、input_scope、prompt_variables |
 | workflow_node.py | WorkflowNode | 保存的节点ID、类型、配置和名称 |
 | workflow_state.py | WorkflowState | 本次输入与各节点输出，运行之间互不共享 |
 | node_context.py | NodeContext | results 按节点ID保存当前节点选中的输入 |
+| prompt_variable.py | PromptVariable | source 与可选 node_id，不保存运行数据 |
 | node_output.py | NodeOutput | value 为当前节点的业务结果，统一保存在运行状态中 |
 
 各处直接从对应文件导入类，不通过 __init__.py 转发。workflow_state.py 同时维护 merge_node_outputs，它只合并状态存储增量，不负责分支等待。
@@ -28,3 +29,5 @@ LLM 节点可保存 config.prompt_config_id，未选择时省略或为 null；�
 WorkflowState 保留 TYPE_CHECKING 下的 dataclass 元信息声明，帮助 PyCharm 匹配 LangGraph 类型约束；运行时状态字段仍只有 inputs、node_outputs。
 
 节点公共执行入口见 [base_node.py](../base_node.py)，整体关系见 [节点包说明](../../README.md)。
+
+NodeContext.question 保存本次原始问题，独立于 results 的输入范围。WorkflowNodeConfig.from_dict 统一创建配置及 PromptVariable；变量来源只存配置，实际值不写回流程或提示词缓存。
