@@ -1,64 +1,48 @@
 # AI Agent 工作流平台
 
-仓库包含两个独立工程，各自在自己的目录中安装依赖、启动和使用 IDE 打开。
+一条保存的流程就是一个 Agent。HTTP 请求携带用户ID和一段需求，流程分析意图、执行所需任务并汇总返回。当前业务方向是只读查询，跨请求记忆后续再做；目标与计划维护在 [技术方案](AI_Agent_可视化工作流平台_技术方案_V1.md)。
 
-当前按个人使用的极简版本维护：配置输入原样保存，不增加业务字段校验、前端输入限制、重复 DTO 或无必要转换。数据库已有约束和框架/SDK 基础要求仍然生效。规则见 [后端规则](agent/AGENTS.md) 和 [前端规则](web/AGENTS.md)。
+## 工程与目录
+
+web 和 agent 是两个独立工程，各自在自己的目录安装依赖、启动和使用 IDE 打开。
 
 ```text
-web/    Vue 3 + TypeScript + Vite 前端
-agent/  Python 3.12+ + FastAPI 后端
+web/                         Vue 3、TypeScript、Element Plus、Vue Flow
+agent/                       Python 3.12+、FastAPI、SQLAlchemy
+  app/core/                  配置、日志、异常和统一返回
+  app/modules/               模型、提示词、流程配置管理及调试台
+  app/workflow/              流程共用对象、运行组织和具体节点
+  app/infrastructure/        数据库连接及 LangGraph、LangChain 接入
+sql/                         PostgreSQL、MySQL 5.7+ 建表与初始化数据
+docs/                        流程保存格式和示例
 ```
 
-## 流程方向
+配置输入按原值提交与保存，数据库约束和框架基础要求仍生效。主要功能入口维护一份说明，子目录通过代码注释介绍；协作规则见 [后端](agent/AGENTS.md) 与 [前端](web/AGENTS.md)。
 
-**一条保存的流程就是一个 Agent。** 通过配置不同的节点、模型、提示词和连线创建不同 Agent，共用同一套运行引擎和节点能力。已有能力通过配置复用，新工具接入后供多个流程使用。
+## 当前能力
 
-业务目标是：HTTP 请求携带用户ID和一段需求，Agent 分析意图、拆分任务，按需查询数据库或知识库，最后汇总并格式化返回。当前只考虑查询，不执行新增、修改、删除等业务数据写操作；跨请求历史对话暂不做。
+- 模型、提示词、流程配置的基础增删改查；模型和提示词使用进程内按需缓存。
+- 模型连接测试、无上下文的单轮问答；API Key 不回显。
+- 全屏流程画布，支持开始、大模型、意图分析、收敛、返回节点，固定串行和并行连线。
+- 节点独立选择直接或全部上游输入，提示词通过弹窗管理并点选变量；最终返回文字或 JSON，排查使用后端日志。
+- 后端任务隔离运行入口：程序生成任务ID，每项任务独立保存状态，主图按任务ID汇总最终结果；当前尚未接入画布分发。
 
-前端使用 Vue Flow 编辑流程，后端用 LangGraph 编排执行，模型调用与消息模板复用 LangChain。项目目标、节点职责和分阶段计划统一维护在 [目标与技术方案](AI_Agent_可视化工作流平台_技术方案_V1.md)。
+可先配置“开始 → 意图分析 → 返回”，确认实际离线模型的任务分类效果；示例见 [intent-analysis.json](docs/examples/intent-analysis.json)，模型ID按实际配置替换。下一步接任务分发，再逐步实现数据库只读查询和知识库检索。
 
-后端分为 workflow_config（配置增删改查）、workflow_runtime（配置加载和执行）、workflow_nodes（具体节点能力）。运行模块复用配置模块的 Repository 并调用节点包，等待模型前结束数据库事务。固定结构使用有中文字段文档的对象，数据库定义仍保存为普通文本。
+## 启动与文档入口
 
-当前已实现的极简版本：
+| 文档 | 内容 |
+|---|---|
+| [后端启动](agent/README.md) | Python 依赖、环境配置和启动命令 |
+| [前端启动与维护](web/README.md) | 页面、公共组件、接口和开发代理 |
+| [流程运行与节点](agent/app/workflow/README.md) | runtime、nodes、data 的职责与任务隔离 |
+| [AI 框架](agent/app/infrastructure/ai/README.md) | LangGraph 连线执行、LangChain 模型与消息 |
+| [流程格式](docs/workflow-definition.md) | 画布定义、输入范围、提示词变量和 HTTP 协议 |
+| [模型配置](agent/app/modules/model_config/README.md) | 字段、接口、Key 与缓存 |
+| [提示词配置](agent/app/modules/prompt_config/README.md) | 接口、正文与缓存 |
+| [流程配置](agent/app/modules/workflow_config/README.md) | 配置 CRUD 与文本定义 |
+| [数据库 SQL](sql/README.md) | 建表和独立初始化数据 |
+| [Python 学习指南](agent/Python学习指南.md) | 结合项目与 Spring 对照理解基本语法 |
+| [目标与技术方案](AI_Agent_可视化工作流平台_技术方案_V1.md) | Agent 方向、当前边界和后续步骤 |
 
-- 全屏画布，提供开始、大模型、意图分析、收敛、返回节点，节点名称可以自定义。
-- 每个流程只有一个开始节点，填写本次测试文字并点击 ▶ 运行；已有时禁止重复添加，后端运行前检查唯一入口。大模型选择模型和可选提示词，处理上游数据。
-- LLM、意图分析、收敛可选“输入范围”：默认读取全部上游数据，或只读直接上游结果。全部结果统一保留，各节点独立选择；LangGraph 负责固定分支的执行和等待。
-- LLM 可以直接连接多个上游，等待全部完成后读取结果；收敛节点用于将多份结果打包成对象，可按需要使用。
-- 独立意图分析节点选择模型即可运行，内置基础说明，可选提示词作为补充；返回包含 tasks 的对象，每项为 type、question，目前只识别需求。
-- 每个流程只有一个返回节点，接收一个上游且没有下游，接口只返回它的数据；其他支路可以独立结束，当前仍等待所有支路完成。
-- 去掉打印节点、步骤记录和前端调试面板，排查信息统一看后端日志；默认 INFO，临时用 --log-level debug 查看节点输入和输出。
-- 运行前保存当前画布，本次输入固定为 text 与可选 user_id；开始节点输出文字，用户ID先留在运行状态中。输入和结果只在本次页面内存中，不写回流程定义；返回节点可输出文字或 JSON 数据。
-
-workflow_nodes 按 base（基类和共用数据）、node（具体节点）分包，每种节点一个文件，外层 factory.py 创建节点；workflow_runtime 负责准备节点、识别入口末端和选择返回结果，data/ 按对象拆分文件。框架代码集中在 infrastructure/ai：langgraph 构建并执行流程图，langchain 创建模型和组装消息模板。节点ID创建后保存，运行状态每次请求独立。
-
-流程定义在 nodes、edges 之外明确保存 start_node_id、return_node_id，前端随节点增删更新，后端直接读取，并在整理节点和连线时检查引用。末端仍根据连线计算，数据库继续使用原文本字段。
-
-模型配置统一通过 [进程内缓存](agent/app/modules/model_config/README.md#模型配置缓存) 读取：命中直接使用，未命中再查库；配置增删改提交成功后清除对应缓存。流程加载直接返回 WorkflowDefinition，不再打包模型 Map。
-
-前端“提示词配置”页面通过 `/api/prompt-configs` 维护名称和正文，提供分页、新增、编辑、只读详情与删除确认，名称允许重复。LLM 节点可选择提示词，运行时从缓存取得原文，按当前节点选择的变量来源渲染为系统消息；公共 LangChain 模板把所选上游数据填入用户消息，未选择提示词时只生成用户消息。输入范围仅属于本次流程的上游依赖，跨请求历史暂不做。
-
-## 下一步目标
-
-独立意图分析节点已接入，复用模型、提示词和输入范围。先用“开始 → 意图分析 → 返回”确认实际离线模型的分类效果和输出稳定性，再增加任务分发节点。示例见 [intent-analysis.json](docs/examples/intent-analysis.json)，模型ID需替换为实际配置。
-
-目标流程为“开始 → 意图分析 → 任务分发 → 按需查询 → 汇总/格式化 → 返回”。任务分发按类型选择已配置路径；数据库分支先读取相关表结构，再生成查询 SQL、只读执行；知识库分支检索相关资料。独立任务可并行，有数据依赖的任务按顺序执行，只汇总实际执行的任务。
-
-后端已补齐[任务运行基础](agent/app/modules/workflow_runtime/README.md#任务运行基础)：程序生成任务ID，每项任务以独立状态复用节点组，主流程按任务ID合并最终结果。原问题和用户ID保留，当前任务问题单独传入，节点ID不会跨任务覆盖。此能力尚未接入画布，下一步再做任务分发节点。
-
-画布当前仍是固定连线执行，意图任务类型为 database、knowledge、chat、unsupported，尚未接入动态任务分发、数据库查询工具或知识库检索。条件分支的等待和输入读取仍需在后续接入，不能直接套用当前固定分支规则。MCP、Skill、循环、会话记忆和流程定义缓存后续按实际需求增加。
-
-
-- [前端启动说明](web/README.md)
-- [后端启动与 PyCharm 配置](agent/README.md)
-- [流程配置接口与表结构](agent/app/modules/workflow_config/README.md)
-- [提示词配置接口](agent/app/modules/prompt_config/README.md)
-- [流程运行与日志](agent/app/modules/workflow_runtime/README.md)
-- [流程节点与扩展入口](agent/app/modules/workflow_nodes/README.md)
-- [AI 框架接入与执行](agent/app/infrastructure/ai/README.md)
-- [最小流程格式与示例](docs/workflow-definition.md)
-- [数据库初始化 SQL](sql/README.md)
-- [项目目标与技术方案](AI_Agent_可视化工作流平台_技术方案_V1.md)
-- [流程方向](#流程方向)
-
-使用 PyCharm 打开本目录后，可在右上角选择 `agent` 运行配置并启动后端；该配置使用 `agent/.venv` 中的解释器。
+使用 PyCharm 打开本目录，可选择右上角 agent 运行配置启动后端；解释器为 agent/.venv。使用终端时分别进入后端或前端目录，按各自启动文档操作。

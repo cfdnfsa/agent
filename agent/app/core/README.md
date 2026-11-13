@@ -8,8 +8,9 @@
 |---|---|
 | `config.py` | 声明数据库配置字段、读取位置、基础类型和缓存方式 |
 | `app_logging.py` | 提供日志对象和当前请求ID，避免与标准库 logging 重名 |
-| [errors](errors/README.md) | 公共业务异常和统一异常处理器 |
-| [response](response/README.md) | 统一返回 Result 和通用分页 Page |
+| [errors/exceptions.py](errors/exceptions.py) | 公共业务异常 BusinessError |
+| [errors/exception_handlers.py](errors/exception_handlers.py) | 统一异常处理器 |
+| [response/responses.py](response/responses.py) | 统一返回 Result、通用分页 Page 与错误文档声明 |
 
 ## 数据库配置怎么读取
 
@@ -47,6 +48,38 @@
 
 日志调用统一使用单行写法，并在调用前后各留一个空行，方便阅读；参数之间正常保留空格。后续新增或修改日志继续遵循该规则。
 
+## 公共异常
+
+业务代码使用 `raise BusinessError("模型配置不存在", status_code=404)` 表达失败，由 main.py 调用 register_exception_handlers(app) 统一装配。业务消息应可向用户公开，不含数据库凭证、Key 或内部堆栈，不为每个模块重复定义“记录不存在”异常。
+
+| 异常类型 | 返回行为 |
+|---|---|
+| BusinessError | 使用指定的状态码和公开说明，默认 HTTP 400 |
+| FastAPI 基础解析错误 | HTTP 422，只返回错误类型、字段位置和说明，不回显输入值 |
+| HTTP 异常 | 保留 404、405 等原状态码和框架响应头 |
+| SQLAlchemy 异常 | HTTP 500，返回通用说明，服务端记录堆栈 |
+| 其他异常 | HTTP 500，返回“服务器内部错误”，服务端记录堆栈 |
+
+处理器使用异步 `(Request, Exception) -> JSONResponse` 签名，内部先用 isinstance 确认具体类型再读取字段，兼顾框架回调约束和类型检查。共用 build_error_response 构造 JSON 与 X-Request-ID，错误时也从 request.state 取得请求ID，便于关联中间件外层异常。
+
+当前不增加业务字段校验，422 仍用于 JSON、路径整数等基础解析；数据库和 SDK 约束失败沿用公共处理。
+
+## 统一返回与分页
+
+Router 包装 Result[T]，Service 返回业务数据；T 是 data 的类型。配置响应直接读取实体字段并排除 Key，不建立重复响应对象。
+
+| 字段 | 约定 |
+|---|---|
+| code | 成功为 0，失败为对应 HTTP 状态码 |
+| message | 成功默认“成功”，失败为公开说明 |
+| data | 业务数据，无数据时为 null |
+
+删除成功返回 HTTP 200 与 `{"code":0,"message":"成功","data":null}`，新增成功为 HTTP 201。失败保留真实 HTTP 状态，不使用 HTTP 200 包装失败。
+
+Page[T] 只有 items、total、page、page_size，不增加数值范围校验。ERROR_RESPONSES 为 Router 声明公共错误模型，使 /docs 中的 400、404、422、500 与实际格式一致。校验错误 data 可包含字段错误列表，其他公共错误通常为 null。
+
+FastAPI 的 /docs、/openapi.json 等框架端点不包装 Result；文件下载或流式接口按各自格式定义。
+
 ## 维护约定
 
-调整环境变量、默认值、读取规则或日志关联方式时，同步修改本文件及相关示例。异常和返回结构的细节维护在对应子包文档中。文档不能写入真实凭证。
+配置、日志、异常和返回结构统一维护本文件，子目录通过代码注释说明。调整环境变量、响应字段、状态码或日志行为时同步更新本文及相关示例，文档不能写入真实凭证。

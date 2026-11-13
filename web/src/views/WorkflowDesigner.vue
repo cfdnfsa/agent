@@ -4,13 +4,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { MarkerType, VueFlow, useVueFlow, type Connection, type Edge, type Node, type XYPosition } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
-import WorkflowCanvasNode from '../components/WorkflowCanvasNode.vue'
-import PromptPickerDialog from '../components/PromptPickerDialog.vue'
-import { builtinPromptVariables, type PromptVariableOption } from '../components/promptVariables'
+import WorkflowCanvasNode from '../components/workflow/WorkflowCanvasNode.vue'
+import PromptPickerDialog from '../components/prompt/PromptPickerDialog.vue'
+import { builtinPromptVariables, type PromptVariableOption } from '../components/prompt/promptVariables'
 import {
   workflowNodeLabel, workflowNodeTypes,
   type InputScope, type PromptVariableBinding, type WorkflowCanvasEdgeData, type WorkflowCanvasNodeData, type WorkflowDefinition, type WorkflowNodeConfig, type WorkflowNodeType,
-} from '../components/workflowNodes'
+} from '../components/workflow/workflowNodes'
 import { getWorkflowConfig, runWorkflowConfig, saveWorkflowConfig, type WorkflowInput, type WorkflowResult } from '../api/workflowConfigs'
 import { listModelConfigs, type ModelConfig } from '../api/modelConfigs'
 import { listAllPromptConfigs, type PromptConfigSummary } from '../api/promptConfigs'

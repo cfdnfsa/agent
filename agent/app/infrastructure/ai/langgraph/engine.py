@@ -11,9 +11,9 @@ run_workflow 从所有节点输出中选择接口返回的数据
 
 from langgraph.graph import END, START, StateGraph
 
-from app.modules.workflow_nodes.base.base_node import BaseNode
-from app.modules.workflow_nodes.base.data.node_output import NodeOutput
-from app.modules.workflow_nodes.base.data.workflow_state import WorkflowState
+from app.workflow.nodes.base.base_node import BaseNode
+from app.workflow.data.execution.node_output import NodeOutput
+from app.workflow.data.execution.workflow_state import WorkflowState
 
 
 # ---------- 使用 LangGraph 构建并执行流程图

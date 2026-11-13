@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import PromptEditorFields from '../components/PromptEditorFields.vue'
-import { builtinPromptVariables, preparePromptVariable } from '../components/promptVariables'
+import PromptEditorFields from '../components/prompt/PromptEditorFields.vue'
+import { builtinPromptVariables, preparePromptVariable } from '../components/prompt/promptVariables'
 import {
   deletePromptConfig, getPromptConfig, listPromptConfigs, savePromptConfig,
   type PromptConfigRequest, type PromptConfigSummary,

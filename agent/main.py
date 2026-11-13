@@ -15,7 +15,7 @@ from app.modules.model_config.router import router as model_config_router
 from app.modules.playground.router import router as playground_router
 from app.modules.prompt_config.router import router as prompt_config_router
 from app.modules.workflow_config.router import router as workflow_config_router
-from app.modules.workflow_runtime.router import router as workflow_runtime_router
+from app.workflow.runtime.router import router as workflow_runtime_router
 
 
 # ---------- 管理应用生命周期

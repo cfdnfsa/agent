@@ -1,6 +1,6 @@
 # 流程配置管理（个人极简版）
 
-本包只负责流程配置的新增、列表、详情、修改和删除，定义文本原样存储，不解析或执行节点。运行能力位于独立的 [workflow_runtime 包](../workflow_runtime/README.md)。
+本包只负责流程配置的新增、列表、详情、修改和删除，定义文本原样存储，不解析或执行节点。运行能力位于 [workflow/runtime](../../workflow/README.md#流程运行)。
 
 保存字段是普通字符串，节点结构由运行模块解释，格式见 [最小流程定义](../../../../docs/workflow-definition.md)。
 

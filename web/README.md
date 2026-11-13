@@ -68,9 +68,12 @@ API Key 不回显。编辑时留空保留原密钥，填写新值替换，勾选
 | `src/views/WorkflowConfigs.vue` | 流程列表、画布入口和删除确认 |
 | `src/views/WorkflowDesigner.vue` | 全屏画布、模型选择、运行结果和保存还原 |
 | `src/views/Playground.vue` | 模型选择与单轮问答接口装配 |
-| `src/components/ChatPanel.vue` | 可复用的输入、消息气泡和发送状态 |
-| `src/components/WorkflowCanvasNode.vue` | 通用节点卡片和连接圆点 |
-| `src/components/workflowNodes.ts` | 工具箱节点目录和流程结构类型 |
+| `src/components/chat/ChatPanel.vue` | 可复用的输入、消息气泡和发送状态 |
+| `src/components/workflow/WorkflowCanvasNode.vue` | 通用节点卡片和连接圆点 |
+| `src/components/workflow/workflowNodes.ts` | 工具箱节点目录和流程结构类型 |
+| `src/components/prompt/PromptPickerDialog.vue` | 提示词选择、正文预览、直接 CRUD 和节点变量绑定 |
+| `src/components/prompt/PromptEditorFields.vue` | 提示词名称、正文及点选变量的共用编辑区 |
+| `src/components/prompt/promptVariables.ts` | 命名变量识别、可选来源及自动生成变量名 |
 | `src/router.ts` | 模型配置、提示词配置、流程配置和调试台页面路由 |
 | `src/api/modelConfigs.ts` | 请求与响应类型、列表和增删改接口 |
 | `src/api/promptConfigs.ts` | 提示词概要、详情、保存和删除接口 |
@@ -89,4 +92,31 @@ API Key 不回显。编辑时留空保留原密钥，填写新值替换，勾选
 
 各页面通过 Vue Router 切换，当前画布状态保存在页面内，没有引入 Pinia。ChatPanel 通过提交函数复用展示，后续流程调试可接入对应接口。
 
-修改接口、字段或密钥处理方式时，同步维护本文档、[页面文档](src/views/README.md)和 [API 文档](src/api/README.md)。
+## 公共组件
+
+src/components 按能力分为 chat（聊天展示）、prompt（提示词编辑与选择）、workflow（流程卡片与结构类型）。页面在 views、HTTP 请求在 api；职责明确且文件较少的目录保持直观结构，分组目录不增加单独 README。
+
+ChatPanel.vue 接收 disabled、异步 submitQuestion(question)，通过 busy-change 报告发送状态。组件只管理输入、纯文字气泡、等待和错误展示，不直接引用模型或流程接口；气泡不作为历史传给提交函数，不写浏览器存储。失败保留输入，发送期间禁止重复操作，切换模型由页面通过 key 重建组件。
+
+WorkflowCanvasNode.vue 展示名称、ID、类型和开始节点旁的运行按钮，run 事件由画布页处理。开始只有输出，返回只有输入；其他处理节点允许连接多个上游。连线点使用 28px 操作区、14px 中心圆点，画布吸附半径为 32。长名称省略显示，悬停查看完整文字，改名不影响ID或连线。
+
+PromptPickerDialog.vue 上方选择模板、下方预览正文，支持新增、编辑、删除。点击“使用此提示词”才把引用和变量绑定应用到当前节点，取消不改节点；保存和删除直接修改公共模板库，影响其他引用。详情读取失败禁止保存和应用，可重试；旧请求结果不能覆盖后选模板，模板删除后不静默改写节点引用。只读画布允许查看，禁止修改。
+
+PromptEditorFields.vue 由管理页与弹窗复用，在光标处插入点选变量。管理页提供原始问题与全部输入，流程弹窗增加当前范围内的上游节点结果；promptVariables.ts 自动生成变量名，来源保存到 config.prompt_variables。缺失或失效来源保留供修正，不自动映射成其他数据。运行替换规则统一见 [流程格式](../docs/workflow-definition.md#提示词选择与变量)。
+
+## 接口约定
+
+src/api/request.ts 使用浏览器 fetch，统一解析 code、message、data；失败抛出可展示的错误，由页面决定展示位置。接口模块不保存页面状态，TypeScript 类型只提供编辑器提示，不增加运行时字段校验。
+
+| 接口文件 | 前缀与约定 |
+|---|---|
+| modelConfigs.ts | /api/model-configs，分页与 CRUD；POST /{id}/test 只提交配置ID，返回 elapsed_ms |
+| promptConfigs.ts | /api/prompt-configs，列表只含ID、名称；get 读取完整正文，save 新增或修改，delete 删除 |
+| workflowConfigs.ts | /api/workflow-configs，列表只含ID、名称，详情读取定义文本；POST /{id}/run 接收 WorkflowInput、返回 payload |
+| playground.ts | POST /api/playground/chat，askModel 提交 model_config_id 与当前 question，返回文字 |
+
+save 方法在ID为 null 时新增，否则修改；列表摘要使用 Pick，写入类型使用 Omit 排除自增ID，不额外构造运行时 DTO。listAllPromptConfigs 分页取得全部概要供画布和弹窗复用，正文仍按ID读取；workflow_definition 始终是字符串，画布解析后保存，接口模块不改写其内容。
+
+WorkflowInput 为 text 与可选 user_id，直接作为请求体，不再包一层字段；WorkflowResult 只含 payload，允许文字、对象或列表，不维护调试步骤。ModelConfig 响应只有 has_api_key；提交时省略 model_api_key 表示保留，null 表示清除，新字符串表示替换，编辑框留空由页面按保留处理。
+
+页面、公共组件与接口统一维护本文件，src 子目录通过代码注释说明。修改接口、字段或交互行为时同步更新本文，流程协议的详细格式维护在 docs/workflow-definition.md。

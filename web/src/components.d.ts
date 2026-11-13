@@ -11,7 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    ChatPanel: typeof import('./components/ChatPanel.vue')['default']
+    ChatPanel: typeof import('./components/chat/ChatPanel.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElCard: typeof import('element-plus/es')['ElCard']
@@ -28,11 +28,11 @@ declare module 'vue' {
     ElTable: typeof import('element-plus/es')['ElTable']
     ElTableColumn: typeof import('element-plus/es')['ElTableColumn']
     ElTag: typeof import('element-plus/es')['ElTag']
-    PromptEditorFields: typeof import('./components/PromptEditorFields.vue')['default']
-    PromptPickerDialog: typeof import('./components/PromptPickerDialog.vue')['default']
+    PromptEditorFields: typeof import('./components/prompt/PromptEditorFields.vue')['default']
+    PromptPickerDialog: typeof import('./components/prompt/PromptPickerDialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    WorkflowCanvasNode: typeof import('./components/WorkflowCanvasNode.vue')['default']
+    WorkflowCanvasNode: typeof import('./components/workflow/WorkflowCanvasNode.vue')['default']
   }
   export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

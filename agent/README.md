@@ -33,46 +33,42 @@ uv run python -m uvicorn main:app --reload
 
 `app/modules/prompt_config` 提供提示词新增、分页列表、详情、修改和删除，接口前缀为 `/api/prompt-configs`。表中只有 id、prompt_name、prompt_content，名称允许重复，正文原样保存；列表只读取 ID 和名称，详情才读取正文。先执行 `sql/pgsql.sql` 中的 prompt_config 建表语句，应用启动不自动建表。
 
-写接口直接接收 JSON，提交哪些字段就更新哪些字段，复用公共事务、错误处理和返回结构。LLM 节点通过可选 prompt_config_id 选择提示词，由 factory 调用 get_prompt_config 按需读取完整实体；未命中才用短会话查库，增删改提交成功后清除对应缓存。提示词正文原样作为系统消息，公共 LangChain 模板把上游上下文填入用户消息；未选提示词时只生成用户消息，不解析正文中的变量。管理列表和详情仍直接查库，接口和缓存规则见 [提示词配置包文档](app/modules/prompt_config/README.md)。
+写接口直接接收 JSON，提交哪些字段就更新哪些字段，复用公共事务、错误处理和返回结构。LLM 节点通过可选 prompt_config_id 选择提示词，由 factory 调用 get_prompt_config 按需读取完整实体；未命中才用短会话查库，增删改提交成功后清除对应缓存。所选提示词按节点变量来源渲染后作为系统消息，公共 LangChain 模板把上游上下文填入用户消息；未选提示词时只生成用户消息。管理列表和详情仍直接查库，接口和缓存规则见 [提示词配置包文档](app/modules/prompt_config/README.md)。
+
 
 ## 流程运行
 
-`app/modules/workflow_runtime` 独立负责执行，配置管理留在 workflow_config。接口为 `POST /api/workflow-configs/{id}/run`，请求体 `{"text":"你好","user_id":"user_001"}`，user_id 可省略或为 null。FastAPI 直接解析为 WorkflowInput，内部通过 .text、.user_id 访问；开始节点仅输出文字，用户ID暂时保留在状态中。返回 `{"payload":"模型回答"}`，payload 也可以是对象或列表。提供开始、大模型、意图分析、收敛、返回节点，全部末端自动结束，接口只返回返回节点的数据。
+app/workflow 集中维护流程运行与节点，配置 CRUD 留在 app/modules/workflow_config，框架代码位于 app/infrastructure/ai。
 
-另外提供独立的 intent_analysis 节点，复用模型与可选补充提示词，内置分类说明；普通 invoke 后由 PydanticOutputParser 解析 IntentAnalysisResult，任务类型为 database、knowledge、chat、unsupported。配置“开始 → 意图分析 → 返回”可查看 tasks 对象；当前只分析需求，不执行任务。结构解析失败返回业务错误，实际分类质量需使用所选模型确认。示例见 [意图分析流程](../docs/examples/intent-analysis.json)。
+```text
+app/workflow/
+├─ data/              按 definition、execution、task、io 分组，一类一文件
+├─ runtime/           HTTP 入口、配置加载、流程与任务执行
+└─ nodes/
+   ├─ base/          节点基类和公共处理
+   ├─ node/          basic 放基础节点，llm 放模型节点与专用数据
+   └─ factory.py     选择类型，准备配置资源
+```
 
-后端已补任务运行基础：create_workflow_tasks 为分析结果分配任务ID，run_task 以独立状态复用节点组，TaskResult 按任务ID归集。任务开始节点输出当前任务问题，原始问题和用户ID保留；相同节点ID不会跨任务覆盖。当前为内部调用能力，尚未接入画布任务分发，详见 [任务运行基础](app/modules/workflow_runtime/README.md#任务运行基础)。
+POST /api/workflow-configs/{id}/run 接收 `{"text":"你好","user_id":"user_001"}`，user_id 可省略，返回 data.payload，允许文字、对象或列表。当前画布支持开始、大模型、意图分析、收敛、返回节点，以及固定串行和并行分支；用“开始 → 意图分析 → 返回”可查看任务列表。
 
-流程定义直接保存 start_node_id、return_node_id，由前端随节点增删维护；草稿缺少对应节点时为 null，运行时必须有值。后端整理上游时确认恰好有一个开始和一个返回节点且与指定ID一致，返回节点必须接收一个上游且没有下游，不符合时返回公共业务错误，不再单独查找这两个节点。引擎接收单个 start_node_id，业务末端仍可有多个。其他分支独立结束但结果不混入响应，当前仍同步等待全部分支；后台任务和队列后续再做。
+内部 run_task 使用独立状态复用节点组，按任务ID保存最终结果，保留原问题与用户ID；自动分发尚未接入画布。完整运行步骤、节点说明、输入范围和任务边界统一维护在 [流程文档](app/workflow/README.md)，保存格式见 [流程协议](../docs/workflow-definition.md)。
 
-config_loader.py 查询流程文本、结束事务，再解析并直接返回 WorkflowDefinition，Service 组织执行；executor 准备节点、入口末端和返回策略，框架构建与执行交给 [ai/langgraph/engine.py](app/infrastructure/ai/langgraph/engine.py)。同级 [workflow_nodes](app/modules/workflow_nodes/README.md) 包维护节点，factory.py 通过缓存准备配置资源。WorkflowState 统一保存 NodeOutput，节点按 input_scope 读取所需结果：默认 all_upstream 读取全部上游，direct_upstream 只读直接上游。executor 提前准备 input_ids，公共 run 按ID取得 NodeContext，再调用 execute、记录日志并保存当前结果。每个节点独立选择，不裁剪其他节点的数据；返回节点只取直接上游 value。公共文字转换在 base/text.py，框架消息模板在 ai/langchain/prompt_builder.py，LLM 内部保留完整回复，默认业务结果为正文。阅读时先看 base/base_node.py，再看具体节点。
-
-节点定义、输入和状态集中在 [workflow_nodes/base/data/](app/modules/workflow_nodes/base/data/README.md)，流程连线、流程定义和最终结果在 [workflow_runtime/data/](app/modules/workflow_runtime/data/README.md)，每个对象一个文件；运行包依赖节点包，节点包不反向依赖。例如 workflow_definition.nodes、node.config.model_config_id、result.payload，均有类型和中文 Attributes 文档；数据库和 JSON 存储字段不变。当前支持固定并行分支收敛，条件分支、循环和记忆后续再做。
-
-AI 框架接入集中在 [infrastructure/ai](app/infrastructure/ai/README.md)：langgraph 负责流程图构建和执行，langchain/model_client.py 负责模型创建，模型测试、调试台和大模型节点复用同一个入口。MCP、Skills、提示词、工具等实际接入时再建目录，对应的配置管理仍放 modules。
-
-默认 INFO 日志关联请求ID、流程ID与节点ID。需要排查数据时启动 `uv run python -m uvicorn main:app --reload --log-level debug`，在后端控制台查看节点输入和输出；模型配置和 Key 不输出。详见 [运行包文档](app/modules/workflow_runtime/README.md) 和 [最小流程定义](../docs/workflow-definition.md)。
+默认 INFO 日志关联请求、流程、任务和节点；排查时使用 `uv run python -m uvicorn main:app --reload --log-level debug` 查看输入输出。模型配置与 Key 不输出，运行数据不写回配置。
 
 ## 代码阅读入口
 
 | 文档 | 内容 |
 |---|---|
-| [Python 学习指南](Python学习指南.md) | 命名、self、类型标注、依赖注入、数据库会话和 `_` / `__` |
-| [公共能力](app/core/README.md) | 配置、日志、公共异常和统一返回结构 |
-| [数据库公共能力](app/infrastructure/database/README.md) | 连接池、会话、ORM 公共字段和事务 |
-| [模型配置管理](app/modules/model_config/README.md) | 接口、数据结构、业务流程和数据库操作 |
-| [提示词配置管理](app/modules/prompt_config/README.md) | 名称与正文、基础增删改查、概要分页 |
-| [流程配置管理](app/modules/workflow_config/README.md) | 三字段流程表、文本定义、分页及基础增删改查 |
-| [流程运行](app/modules/workflow_runtime/README.md) | 运行接口、统一配置加载、LangGraph 执行与日志 |
-| [流程节点](app/modules/workflow_nodes/README.md) | 节点基类、开始、大模型、意图分析、收敛、返回与创建入口 |
-| [AI 公共能力](app/infrastructure/ai/README.md) | AI 框架接入与业务模块之间的职责 |
-| [LangGraph 图引擎](app/infrastructure/ai/langgraph/README.md) | 节点注册、连线、编译与执行 |
-| [模型调用公共能力](app/infrastructure/ai/langchain/README.md) | LangChain 模型集成、实体传参、基础地址和错误处理 |
-| [调试台](app/modules/playground/README.md) | 选择模型进行单轮问答，不保存聊天记录 |
-| [后端协作规则](AGENTS.md) | 后续中文注释和包文档维护约定 |
+| [流程运行与节点](app/workflow/README.md) | 建议先读 BaseNode，再读具体节点和 executor |
+| [AI 框架](app/infrastructure/ai/README.md) | LangGraph 的注册、连线、编译执行，以及 LangChain 模型调用 |
+| [公共能力](app/core/README.md) | 环境配置、请求日志、异常和统一返回 |
+| [数据库能力](app/infrastructure/database/README.md) | 连接池、会话、ORM 与事务 |
+| [模型配置](app/modules/model_config/README.md) | CRUD、Key 与缓存 |
+| [提示词配置](app/modules/prompt_config/README.md) | 名称、正文与缓存 |
+| [流程配置](app/modules/workflow_config/README.md) | 定义文本与 CRUD |
+| [调试台](app/modules/playground/README.md) | 单轮问答 |
+| [Python 学习指南](Python学习指南.md) | 基本语法及 Spring 对照 |
+| [协作规则](AGENTS.md) | 命名、注释、日志和文档维护要求 |
 
-各代码文件中已补充中文说明。项目使用 Python 命名空间包，不放空的 `__init__.py`；仍从当前后端根目录使用 `uvicorn main:app --reload` 启动。
-
-维护时优先采用直白的普通函数和现有分层，辅助方法默认不加前导 `_`。条件表达式展开为普通多行 if / else，集合使用普通 for 循环构建，可读性优先于减少行数。具体要求记录在 `AGENTS.md`；`model_client.py` 通过数据库实体创建 LangChain 模型，URL 原样传给 SDK；模型测试和问答在各自 Service 中直接调用框架的 invoke。模型异常暂时沿用公共错误处理，不单独分类。
-
-模型节点的提示词支持点选变量：本次问题、当前输入范围全部结果、某个上游完整结果。原文由缓存保留，运行时按当前节点 prompt_variables 渲染；普通 LLM 和意图补充共用此能力。多个结果目前整理为一条用户上下文消息，不自动传递完整角色消息列表。
+项目使用 Python 命名空间包，不放空的 __init__.py；从当前后端目录启动，原有命令保持有效。主要功能入口维护一份 README，子目录用代码注释说明，不再逐层复制文档。

@@ -1,6 +1,6 @@
 # 最小流程与运行
 
-前端使用 Vue Flow，后台用 LangGraph 执行。当前提供开始、大模型、意图分析、收敛、返回节点，页面只显示返回节点的数据，排查信息看后端日志。配置管理位于 workflow_config，执行位于 [workflow_runtime](../agent/app/modules/workflow_runtime/README.md)，具体节点位于同级 [workflow_nodes](../agent/app/modules/workflow_nodes/README.md)。示例见 [普通问答](examples/basic-chat.json) 和 [意图分析](examples/intent-analysis.json)，模型ID 1 需换成实际配置ID。
+前端使用 Vue Flow，后台用 LangGraph 执行。当前提供开始、大模型、意图分析、收敛、返回节点，页面只显示返回节点的数据，排查信息看后端日志。配置管理位于 modules/workflow_config；运行、节点和共用对象统一放在 [workflow](../agent/app/workflow/README.md)。示例见 [普通问答](examples/basic-chat.json) 和 [意图分析](examples/intent-analysis.json)，模型ID 1 需换成实际配置ID。
 
 ## 流程结构
 
@@ -114,7 +114,7 @@ WorkflowState.node_outputs 按节点ID统一保存 NodeOutput，value 为当前�
 
 结果对象可通过 result.tasks、task.type、task.question 读取，也可继续交给下游 LLM；公共文字函数负责嵌套对象的 JSON 序列化。意图结果使用 Pydantic BaseModel 以复用框架解析，普通节点定义和状态仍为 dataclass，表结构不变。
 
-后端已提供内部任务运行基础：程序为每项分析任务生成 task_id，run_task 使用独立 WorkflowState 执行调用方选定的节点组；任务开始节点输出 task.question，inputs.text 与 `{question}` 仍是原始用户问题，用户ID保留。各任务节点结果互相隔离，主图按任务ID汇总 TaskResult，详见 [任务运行基础](../agent/app/modules/workflow_runtime/README.md#任务运行基础)。这一步没有新增画布节点、接口参数或定义字段，意图分析结果尚不会自动执行。
+后端已提供内部任务运行基础：程序为每项分析任务生成 task_id，run_task 使用独立 WorkflowState 执行调用方选定的节点组；任务开始节点输出 task.question，inputs.text 与 `{question}` 仍是原始用户问题，用户ID保留。各任务节点结果互相隔离，主图按任务ID汇总 TaskResult，详见 [任务运行基础](../agent/app/workflow/README.md#任务运行基础)。这一步没有新增画布节点、接口参数或定义字段，意图分析结果尚不会自动执行。
 
 ## HTTP 与日志
 
@@ -136,10 +136,10 @@ WorkflowState.node_outputs 按节点ID统一保存 NodeOutput，value 为当前�
 
 ## 对象与保存
 
-固定结构使用带类型和中文字段说明的 dataclass：workflow_nodes/base/data/ 按对象维护节点定义、输入和状态，workflow_runtime/data/ 按对象维护流程连线、流程定义和最终结果，均为一类一文件。JSON 只在边界读取和序列化，动态业务内容保留 Any。workflow_definition 仍为普通文本，配置保存接口不解析或改写内容，表结构不变。
+固定结构使用带类型和中文字段说明的 dataclass：workflow/data/ 按 definition（定义）、execution（执行数据）、task（任务）、io（流程输入输出）分组，模型节点专用对象放 workflow/nodes/node/llm/data/，均为一类一文件。JSON 只在边界读取和序列化，动态业务内容保留 Any。workflow_definition 仍为普通文本，配置保存接口不解析或改写内容，表结构不变。
 
 流程加载直接返回 WorkflowDefinition，节点创建时按模型ID读取统一进程内缓存，命中直接返回实体，未命中再用短会话查库。模型调用前查询会话已经关闭，不再为每次流程运行收集模型ID和组装模型 Map；配置增删改提交后使对应缓存失效。流程定义本身仍每次从数据库读取。
 
-workflow_runtime/executor.py 负责准备节点和选择返回数据；StateGraph、连线、编译和执行集中在 [ai/langgraph](../agent/app/infrastructure/ai/langgraph/README.md)。模型创建集中在同级 ai/langchain，沿用现有模型实体和输入输出，不增加框架配置转换层。
+workflow/runtime/executor.py 负责准备节点和选择返回数据；StateGraph、连线、编译和执行集中在 [ai/langgraph](../agent/app/infrastructure/ai/README.md#langgraph)。模型创建集中在同级 ai/langchain，沿用现有模型实体和输入输出，不增加框架配置转换层。
 
 节点配置、连线、坐标和扩展字段按当前定义直接读写。无法解析的原文保留供修正，不用空图覆盖。

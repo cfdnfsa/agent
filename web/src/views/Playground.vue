@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import ChatPanel from '../components/ChatPanel.vue'
+import ChatPanel from '../components/chat/ChatPanel.vue'
 import { listModelConfigs, type ModelConfig } from '../api/modelConfigs'
 import { askModel } from '../api/playground'
 

@@ -82,8 +82,9 @@
 | HTTP 服务 | Python 3.12+、FastAPI，配置管理沿用 Router → Service → Repository |
 | 配置数据 | SQLAlchemy ORM、PostgreSQL；另维护 MySQL 5.7+ 初始化 SQL |
 | 流程配置 | modules/workflow_config，只负责配置增删改查 |
-| 流程运行 | modules/workflow_runtime，加载定义、准备节点、选择最终返回 |
-| 节点能力 | modules/workflow_nodes，base 放公共能力和对象，node 放具体节点 |
+| 流程运行 | workflow/runtime，加载定义、准备节点、隔离执行任务、选择最终返回 |
+| 节点能力 | workflow/nodes，base 放公共处理，node/basic 放基础节点，node/llm 放模型节点及专用对象 |
+| 流程共用对象 | workflow/data，按 definition、execution、task、io 分组，一类一文件 |
 | 图编排 | infrastructure/ai/langgraph，集中使用框架连线、编译和执行能力 |
 | 模型与模板 | infrastructure/ai/langchain，集中创建模型和组装消息 |
 
@@ -113,7 +114,7 @@
 
 - [项目入口与启动](README.md)
 - [当前流程格式与运行约定](docs/workflow-definition.md)
-- [节点实现与扩展入口](agent/app/modules/workflow_nodes/README.md)
-- [运行组织与日志](agent/app/modules/workflow_runtime/README.md)
+- [节点实现与扩展入口](agent/app/workflow/README.md#节点)
+- [运行组织与日志](agent/app/workflow/README.md#流程运行)
 - [后端协作规则](agent/AGENTS.md)
 - [前端协作规则](web/AGENTS.md)
