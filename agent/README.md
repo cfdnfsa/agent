@@ -41,6 +41,8 @@ uv run python -m uvicorn main:app --reload
 
 另外提供独立的 intent_analysis 节点，复用模型与可选补充提示词，内置分类说明；普通 invoke 后由 PydanticOutputParser 解析 IntentAnalysisResult，任务类型为 database、knowledge、chat、unsupported。配置“开始 → 意图分析 → 返回”可查看 tasks 对象；当前只分析需求，不执行任务。结构解析失败返回业务错误，实际分类质量需使用所选模型确认。示例见 [意图分析流程](../docs/examples/intent-analysis.json)。
 
+后端已补任务运行基础：create_workflow_tasks 为分析结果分配任务ID，run_task 以独立状态复用节点组，TaskResult 按任务ID归集。任务开始节点输出当前任务问题，原始问题和用户ID保留；相同节点ID不会跨任务覆盖。当前为内部调用能力，尚未接入画布任务分发，详见 [任务运行基础](app/modules/workflow_runtime/README.md#任务运行基础)。
+
 流程定义直接保存 start_node_id、return_node_id，由前端随节点增删维护；草稿缺少对应节点时为 null，运行时必须有值。后端整理上游时确认恰好有一个开始和一个返回节点且与指定ID一致，返回节点必须接收一个上游且没有下游，不符合时返回公共业务错误，不再单独查找这两个节点。引擎接收单个 start_node_id，业务末端仍可有多个。其他分支独立结束但结果不混入响应，当前仍同步等待全部分支；后台任务和队列后续再做。
 
 config_loader.py 查询流程文本、结束事务，再解析并直接返回 WorkflowDefinition，Service 组织执行；executor 准备节点、入口末端和返回策略，框架构建与执行交给 [ai/langgraph/engine.py](app/infrastructure/ai/langgraph/engine.py)。同级 [workflow_nodes](app/modules/workflow_nodes/README.md) 包维护节点，factory.py 通过缓存准备配置资源。WorkflowState 统一保存 NodeOutput，节点按 input_scope 读取所需结果：默认 all_upstream 读取全部上游，direct_upstream 只读直接上游。executor 提前准备 input_ids，公共 run 按ID取得 NodeContext，再调用 execute、记录日志并保存当前结果。每个节点独立选择，不裁剪其他节点的数据；返回节点只取直接上游 value。公共文字转换在 base/text.py，框架消息模板在 ai/langchain/prompt_builder.py，LLM 内部保留完整回复，默认业务结果为正文。阅读时先看 base/base_node.py，再看具体节点。

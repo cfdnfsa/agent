@@ -11,7 +11,7 @@
 | base/base_node.py | BaseNode.run 按输入范围读取数据、调用 execute、记录日志、保存 NodeOutput |
 | base/prompt_variables.py | 按当前节点来源配置替换命名变量，不修改缓存原文 |
 | base/text.py | 公共文字转换，文字原样保留，对象和列表转为 JSON 文字 |
-| node/start_node.py | StartNode 读取 inputs.text，原样交给下游；user_id 留在运行状态中 |
+| node/start_node.py | StartNode 在主流程输出 inputs.text，在任务中输出 task.question；原始输入保留 |
 | node/llm_node.py | LlmNode 从 resources 读取模型和可选提示词，调用 LangChain invoke |
 | node/intent_analysis_node.py | IntentAnalysisNode 分析需求，使用框架解析出固定任务列表 |
 | node/data/intent_task.py、intent_analysis_result.py | 意图任务与结果对象，供解析器和后续节点共用 |
@@ -37,7 +37,7 @@ factory.py 内按小方法分工：create_node 选择类型，create_llm_node、
 - 收敛按自己的输入范围收集结果。例如默认分支收集为 `{"start_1":"问题","llm_a":"回答A","llm_b":"回答B"}`，选择直接上游后只收集 llm_a、llm_b。上游ID去重，但收敛本身也保存为一份独立结果；后续节点选择全部上游时会同时读取原节点结果与收敛结果。等待全部上游由 ai/langgraph 引擎负责。
 - 每个流程恰好一个返回节点，它接收一个上游且没有下游，config 为空对象。其他分支也可独立结束，但接口只取返回节点的数据；本次图执行仍等待所有分支完成，不自动转为后台任务。
 - 节点对象仅保存配置；WorkflowInput 固定为 text 和可选 user_id，通过 state.inputs.text、state.inputs.user_id 读取。用户ID暂时预留，不自动拼入模型输入，也不保存上下文记忆。WorkflowState 保存每次请求的输入与节点输出，节点ID沿用已保存定义，运行时不生成新ID。
-- base/data/workflow_state.py 中的 merge_node_outputs 只合并状态存储增量，不负责等待。WorkflowState 的 TYPE_CHECKING 元信息声明仅帮助类型检查，实际状态字段仍为 inputs、node_outputs。
+- base/data/workflow_state.py 中的 merge_node_outputs、merge_task_results 分别按节点ID、任务ID合并增量，不负责等待。WorkflowState 的 TYPE_CHECKING 元信息声明仅帮助类型检查，实际字段为 inputs、node_outputs、task、task_results。每项任务有自己的状态，相同节点ID可重复使用；主流程只汇总 TaskResult，具体入口见 [任务运行基础](../workflow_runtime/README.md#任务运行基础)。
 - 模型和提示词实体由 factory 通过各自缓存取得，放入 LlmNodeResources 后交给 LlmNode，直接保留实体引用；查询会话在执行图前关闭，不随节点保留。资源对象位于 node/data，只保存此类节点需要的资源；WorkflowState 继续保存每次运行的输入与输出。Key 仅供内部调用，不输出模型配置或提示词正文；节点输入输出正文只在 DEBUG 级别记录。缓存规则见 [模型配置](../model_config/README.md#模型配置缓存) 和 [提示词配置](../prompt_config/README.md#提示词配置缓存)。
 
 以后新增节点，在 node 下添加对应文件并维护 factory.py 的类型分支；[workflow_runtime](../workflow_runtime/README.md) 组织运行和返回结果，[ai/langgraph](../../infrastructure/ai/langgraph/README.md) 集中处理图的构建与执行。大模型创建入口位于 ai/langchain/model_client.py。流程定义与示例见 [最小流程格式](../../../../docs/workflow-definition.md)。

@@ -16,7 +16,7 @@ from app.modules.workflow_runtime.data.workflow_result import WorkflowResult
 
 # ---------- 组织本次流程运行
 def run_workflow(workflow_definition: WorkflowDefinition, workflow_input: WorkflowInput) -> WorkflowResult:
-    """准备节点对象、交给图引擎运行，只返回唯一返回节点的数据。
+    """创建主流程状态，再复用统一图执行步骤。
 
     Args:
         workflow_definition: 已加载的流程定义；节点准备时按需读取模型缓存，再执行图。
@@ -24,6 +24,21 @@ def run_workflow(workflow_definition: WorkflowDefinition, workflow_input: Workfl
 
     Returns:
         返回节点的输出，其他独立末端只参与执行。
+    """
+    initial_state = WorkflowState(inputs=workflow_input)
+    return execute_workflow(workflow_definition, initial_state)
+
+
+# ---------- 使用独立状态执行一组流程节点
+def execute_workflow(workflow_definition: WorkflowDefinition, initial_state: WorkflowState) -> WorkflowResult:
+    """主流程和任务流程共用准备、连线和返回逻辑，运行数据由调用方单独创建。
+
+    Args:
+        workflow_definition: 当前要执行的节点与连线；任务可复用同一份只读定义。
+        initial_state: 本次图独有的状态；不能把主流程已有输出传入任务。
+
+    Returns:
+        唯一返回节点的业务数据；异常原样向上传递，不返回部分成功结果。
     """
 
     # 入口和返回位置由流程定义明确指定，不再遍历节点寻找它们。
@@ -39,12 +54,12 @@ def run_workflow(workflow_definition: WorkflowDefinition, workflow_input: Workfl
     # 其他分支也可能独立结束，所以仍根据连线识别全部末端。
     terminal_node_ids = find_terminal_node_ids(workflow_definition)
 
-    # 每次运行创建独立状态，具体连线和执行交给 LangGraph 引擎。
+    # 调用方已经创建独立状态，具体连线和执行仍交给同一个 LangGraph 引擎。
     node_outputs = run_graph(
         nodes=runtime_nodes,
         start_node_id=start_node_id,
         terminal_node_ids=terminal_node_ids,
-        initial_state=WorkflowState(inputs=workflow_input),
+        initial_state=initial_state,
     )
 
     return build_workflow_result(node_outputs, return_node_id)

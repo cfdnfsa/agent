@@ -33,3 +33,5 @@ flowchart TD
 引擎只使用 workflow_nodes/base 中的节点与状态契约，不读取数据库、不创建业务节点、不选择模型，也不决定哪些结果作为 HTTP 响应。workflow_runtime/executor.py 确认唯一返回节点且它没有下游，再从引擎的全部输出中只取该节点的数据。业务返回节点只是普通节点，框架 END 是终点标记；invoke 仍等待所有分支完成。
 
 每次运行创建独立图和状态；当前没有图缓存、条件分支、循环、后台任务或跨请求记忆。节点日志由 BaseNode 记录，流程日志由运行 Service 记录，框架异常继续向上交给现有公共处理。
+
+任务运行复用同一引擎：workflow_runtime/task_executor.py 创建独立状态并通过 execute_workflow 调用 run_graph。后续在主图节点中调用 run_task 时，属于框架支持的[节点内调用子图](https://docs.langchain.com/oss/python/langgraph/use-subgraphs#call-a-subgraph-inside-a-node)方式。任务内部输出不直接合并到主图；调用节点只提交 TaskResult，主图的 task_results reducer 按任务ID合并。当前只完成这一内部基础，未接入画布动态路由，也没有自建调度器。

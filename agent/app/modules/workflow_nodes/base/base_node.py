@@ -34,19 +34,22 @@ class BaseNode:
             仅含当前节点输出的状态增量，不覆盖其他分支结果。
         """
         node = self.definition
+        task_id = None
+        if state.task is not None:
+            task_id = state.task.task_id
 
-        logger.info("请求ID=%s 操作=执行节点开始 节点ID=%s 节点名称=%s 节点类型=%s", request_id_context.get(), node.id, node.name or node.id, node.type)
+        logger.info("请求ID=%s 操作=执行节点开始 任务ID=%s 节点ID=%s 节点名称=%s 节点类型=%s", request_id_context.get(), task_id, node.id, node.name or node.id, node.type)
 
         node_input = self.read_input(state)
 
-        logger.debug("请求ID=%s 节点ID=%s 输入=%r", request_id_context.get(), node.id, node_input.results)
+        logger.debug("请求ID=%s 任务ID=%s 节点ID=%s 输入=%r", request_id_context.get(), task_id, node.id, node_input.results)
 
         # self.execute 会调用实际子类的方法，例如 LlmNode.execute。
         node_output = self.execute(node_input)
 
-        logger.debug("请求ID=%s 节点ID=%s 输出=%r", request_id_context.get(), node.id, node_output.value)
+        logger.debug("请求ID=%s 任务ID=%s 节点ID=%s 输出=%r", request_id_context.get(), task_id, node.id, node_output.value)
 
-        logger.info("请求ID=%s 操作=执行节点完成 节点ID=%s 节点名称=%s", request_id_context.get(), node.id, node.name or node.id)
+        logger.info("请求ID=%s 操作=执行节点完成 任务ID=%s 节点ID=%s 节点名称=%s", request_id_context.get(), task_id, node.id, node.name or node.id)
 
         return {"node_outputs": {node.id: node_output}}
 

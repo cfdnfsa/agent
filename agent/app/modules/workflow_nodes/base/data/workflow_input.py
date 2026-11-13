@@ -8,7 +8,7 @@ class WorkflowInput:
     """本次运行输入，运行之间互不共享。
 
     Attributes:
-        text: 本次用户输入的文字，开始节点将它原样交给下游。
+        text: 本次用户的原始文字；主流程开始节点输出它，任务流程另用 task.question。
         user_id: 可选用户ID，先保留在运行状态中，后续记忆等节点需要时读取。
     """
 

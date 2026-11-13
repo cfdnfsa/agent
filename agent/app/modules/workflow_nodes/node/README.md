@@ -1,6 +1,6 @@
 # 具体节点实现
 
-- start_node.py：开始节点，原样输出 inputs.text；预留用户ID保存在 inputs.user_id 中。
+- start_node.py：主流程开始节点原样输出 inputs.text，任务中输出 task.question；原问题与用户ID仍保留在 inputs 中。
 - llm_node.py：大模型节点，通过 resources 读取已加载的配置，公共文字函数转换上下文，ai/langchain/prompt_builder.py 使用 ChatPromptTemplate 组装消息，再创建模型并 invoke。提示词先按节点选择的变量来源渲染，再作为系统消息使用，用户消息由公共模板填入上下文。
 - intent_analysis_node.py：独立意图分析节点，内置分类说明，可选提示词作为补充；普通 invoke 后使用 PydanticOutputParser 解析 tasks 列表，不要求模型支持工具调用，不分发或执行任务。
 - data/intent_task.py、data/intent_analysis_result.py：固定的任务与分析结果，使用 Pydantic BaseModel 供框架直接解析，通过 result.tasks、task.type、task.question 读取。

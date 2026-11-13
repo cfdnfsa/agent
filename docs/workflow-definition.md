@@ -114,6 +114,8 @@ WorkflowState.node_outputs 按节点ID统一保存 NodeOutput，value 为当前�
 
 结果对象可通过 result.tasks、task.type、task.question 读取，也可继续交给下游 LLM；公共文字函数负责嵌套对象的 JSON 序列化。意图结果使用 Pydantic BaseModel 以复用框架解析，普通节点定义和状态仍为 dataclass，表结构不变。
 
+后端已提供内部任务运行基础：程序为每项分析任务生成 task_id，run_task 使用独立 WorkflowState 执行调用方选定的节点组；任务开始节点输出 task.question，inputs.text 与 `{question}` 仍是原始用户问题，用户ID保留。各任务节点结果互相隔离，主图按任务ID汇总 TaskResult，详见 [任务运行基础](../agent/app/modules/workflow_runtime/README.md#任务运行基础)。这一步没有新增画布节点、接口参数或定义字段，意图分析结果尚不会自动执行。
+
 ## HTTP 与日志
 
 `POST /api/workflow-configs/{id}/run`，请求体：

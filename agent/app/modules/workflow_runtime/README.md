@@ -11,6 +11,7 @@
 | config_loader.py | 读取流程文本并结束查询事务，再解析成 WorkflowDefinition |
 | data/ | 流程连线、流程定义和最终结果，每个对象一个文件 |
 | executor.py | 准备节点和入口末端、调用图引擎、选择返回数据 |
+| task_executor.py | 为意图任务生成ID，用独立状态执行调用方选定的节点组 |
 
 调用顺序：router → service → load_workflow_definition → 流程 Repository。流程查询结束后，加载入口直接返回 WorkflowDefinition。executor 用 workflow_nodes.factory 创建节点；大模型节点按 model_config_id 调用 get_model_config，选中提示词时再按 prompt_config_id 调用 get_prompt_config。两者均优先命中内存，未命中用独立短会话查询。配置准备完成并关闭查询会话后，再调用 ai/langgraph/engine.py 的 run_graph。节点的 run、execute 不查库，也不调用后续节点。
 
@@ -18,11 +19,12 @@ parse_workflow_definition 读取 JSON 中明确保存的 start_node_id、return_
 
 run_workflow 直接读取 workflow_definition.start_node_id、return_node_id，草稿中对应值可以为 null，但运行时必须指定。create_runtime_nodes 在准备上游列表的同一轮循环中确认开始、返回节点唯一且与这两个ID一致；整理连线时确认返回节点接收一个上游且没有下游，不符合时抛出公共 BusinessError（400）。不再单独遍历查找入口和返回位置。入口以单个字符串传给引擎，全部业务末端仍用列表。其他分支可以独立结束；保存接口仍按原文保存，结构检查只在运行时进行。
 
-executor.py 中的 run_workflow 只保留步骤顺序，辅助函数继续放在同一个文件，使用现有类型：
+executor.py 中的 run_workflow 创建状态，execute_workflow 组织执行步骤；辅助函数继续放在同一个文件，使用现有类型：
 
 | 步骤 | 职责 |
 |---|---|
-| run_workflow | 直接读取定义中的开始、返回ID，组织下面的步骤 |
+| run_workflow | 为普通请求创建 WorkflowState，再调用 execute_workflow |
+| execute_workflow | 主流程与任务共用执行步骤，读取定义中的开始、返回ID |
 | create_runtime_nodes | 整理上游时检查开始、返回ID与唯一性，检查返回连线，再通过 factory 创建节点 |
 | find_upstream_node_ids | 沿入边找出当前节点的全部上游ID，去重并排除无关分支 |
 | find_terminal_node_ids | 根据连线找出没有下游的节点，保留定义中的节点顺序 |
@@ -31,7 +33,8 @@ executor.py 中的 run_workflow 只保留步骤顺序，辅助函数继续放在
 
 ```mermaid
 flowchart TD
-    A["run_workflow：读取保存的开始、返回ID"] --> C["create_runtime_nodes：整理关系、检查引用并创建节点"]
+    A["run_workflow / run_task：创建各自的状态"] --> B["execute_workflow：读取保存的开始、返回ID"]
+    B --> C["create_runtime_nodes：整理关系、检查引用并创建节点"]
     C --> D["find_terminal_node_ids：找出末端"]
     D --> E["run_graph：连接并执行流程图"]
     E --> F["build_workflow_result：读取返回节点数据"]
@@ -53,7 +56,7 @@ run_workflow 直接接收 WorkflowDefinition 和本次输入，不再打包流�
 
 意图分析也参与 input_scope 的输入ID准备。它的 IntentAnalysisResult、IntentTask 位于节点 node/data，使用 Pydantic BaseModel 直接复用框架 JSON 解析；NodeOutput.value 保留同一结果对象，统一返回会将它序列化为 tasks 对象，普通运行结构保持 dataclass。当前只分析任务，未接入条件路由或任务分发。
 
-WorkflowState 在 TYPE_CHECKING 块中声明 dataclass 自动生成的元信息，兼容 PyCharm 对 LangGraph 状态类型约束的识别。该声明不参与运行，图状态仍只有 inputs、node_outputs；不使用忽略检查或 Any 强制转换。
+WorkflowState 在 TYPE_CHECKING 块中声明 dataclass 自动生成的元信息，兼容 PyCharm 对 LangGraph 状态类型约束的识别。该声明不参与运行，实际状态字段是 inputs、node_outputs、task、task_results；不使用忽略检查或 Any 强制转换。
 
 `POST /api/workflow-configs/{id}/run`，请求体 `{"text":"你好","user_id":"user_001"}`，user_id 可省略或为 null。FastAPI 按现有 WorkflowInput dataclass 完成基础字段解析，Router 直接传给 Service，不再手工从字典取值，不增加额外必填、长度或格式等业务校验。开始节点输出 text，user_id 暂时保留在 state.inputs 中供后续节点读取；不支持旧请求字段。
 
@@ -63,11 +66,31 @@ WorkflowState 在 TYPE_CHECKING 块中声明 dataclass 自动生成的元信息�
 
 返回节点不是框架 END，也不触发提前返回 HTTP。当前同步等待整次图运行完成，其他分支未处理的异常也会影响本次请求；后台任务和队列后续再做。大模型可以直接连接多个上游，框架等待全部完成后按输入范围取值；返回节点仍固定一个上游，需要把多份结果作为一个对象返回时可使用收敛节点。判断、循环和工具能力后续再做。
 
+## 任务运行基础
+
+task_executor.py 当前提供内部调用能力，尚未接入画布、HTTP 或自动任务分发：
+
+1. create_workflow_tasks(intent_result) 保留意图分析的 type、question，为每项任务生成 UUID。即使同类型或同问题也不合并，空任务列表返回空列表。
+2. run_task(task_definition, original_input, task) 复制原始 WorkflowInput，为本任务创建独立 WorkflowState，再调用 execute_workflow。节点与模型配置沿用现有创建入口，不增加任务表或另一套引擎。
+3. 开始节点输出 task.question；inputs.text、inputs.user_id 仍保留原始请求，NodeContext.question 和提示词 `{question}` 始终指原问题。
+4. 返回 TaskResult(task_id, value)，只包含该任务返回节点的数据。失败继续抛出原异常，不返回伪成功结果。
+
+后续分发节点选定任务节点组后，可以在节点方法内调用 run_task，再向主图提交结果增量：
+
+```python
+result = run_task(task_definition, state.inputs, task)
+return {"task_results": {result.task_id: result}}
+```
+
+LangGraph 调度主图节点及其中调用的任务子图，不自建线程池或调度器。每项任务有独立 node_outputs，相同节点ID不会互相覆盖；主图通过 merge_task_results 按任务ID合并最终结果，不接收子图全部节点记录。两个任务可以复用同一份只读定义，当前仍每项任务单独准备节点、构建图，未增加图缓存。
+
+这一步只提供隔离执行和结果合并契约。意图节点仍只输出任务列表；按类型选路、任务节点组的画布配置、动态分发与汇总节点留到下一步。当前每个任务节点组仍须有一个开始和一个返回节点，组内沿用固定连线规则，尚不处理任务之间的依赖。
+
 ## 后端日志
 
 复用现有 uvicorn.error 日志对象，在 PyCharm 或启动控制台查看：
 
-- INFO：请求ID、流程ID、节点ID和名称，以及开始、完成、失败信息；失败记录堆栈。
+- INFO：请求ID、流程ID、任务ID、节点ID和名称，以及开始、完成、失败信息；失败堆栈继续交给流程服务与公共异常处理。
 - DEBUG：额外记录每个节点的输入、输出正文，不记录模型配置或 Key。
 
 默认按普通启动命令运行即可，排查时临时使用：

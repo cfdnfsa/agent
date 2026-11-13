@@ -7,15 +7,19 @@ from app.modules.workflow_nodes.base.data.workflow_state import WorkflowState
 
 
 class StartNode(BaseNode):
-    """开始节点：把本次输入的 text 原样交给下游，用户ID留在运行状态中。"""
+    """开始节点：主流程输出原问题，任务流程输出当前任务问题。"""
 
     # ---------- 读取本次请求的输入
     def read_input(self, state: WorkflowState) -> NodeContext:
-        """开始节点没有上游，将本次文字放在自己的ID下，作为最初的数据。
+        """开始节点没有上游，将当前要处理的文字放在自己的ID下。
 
-        用户ID继续保留在 state.inputs.user_id 中，不自动传入模型。
+        原始问题与用户ID仍在 state.inputs 中；任务不覆盖它们，{question} 仍取原问题。
         """
-        return NodeContext(results={self.definition.id: state.inputs.text}, question=state.inputs.text)
+        if state.task is None:
+            input_text = state.inputs.text
+        else:
+            input_text = state.task.question
+        return NodeContext(results={self.definition.id: input_text}, question=state.inputs.text)
 
     # ---------- 输出开始节点的数据
     def execute(self, node_input: NodeContext) -> NodeOutput:
